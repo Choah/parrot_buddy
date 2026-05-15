@@ -181,10 +181,6 @@ function buildTrayMenu(snapshot = store.snapshot()) {
 
   return Menu.buildFromTemplate([
     { label: 'Parrot Buddy', enabled: false },
-    { label: traySummaryLabel(snapshot), enabled: false },
-    { type: 'separator' },
-    ...statusItems,
-    { type: 'separator' },
     { label: 'Show Floating Bird', click: showWindow },
     { label: 'Hide Bird', click: hideWindow },
     {
@@ -194,6 +190,9 @@ function buildTrayMenu(snapshot = store.snapshot()) {
         broadcastSnapshot();
       }
     },
+    { type: 'separator' },
+    { label: traySummaryLabel(snapshot), enabled: false },
+    ...statusItems,
     { type: 'separator' },
     {
       label: 'Quit',
