@@ -10,9 +10,9 @@ Codex와 Claude Code가 지금 작업 중인지, 확인을 기다리는지, 끝�
 
 ## 데모
 
-<video src="./assets/parrot-buddy-demo.mov" controls width="720" aria-label="Parrot Buddy demo video"></video>
+<img src="./assets/parrot-buddy-demo.gif" width="720" alt="Parrot Buddy demo" />
 
-[데모 영상 열기](./assets/parrot-buddy-demo.mov)
+[전체 데모 영상 열기](./assets/parrot-buddy-demo.mov)
 
 ## 주요 기능
 
