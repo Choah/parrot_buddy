@@ -26,6 +26,7 @@ const GUIDE_WINDOW_SIZE = { width: 430, height: 520 };
 const MIN_WINDOW_SIZE = { width: 128, height: 112 };
 let compactWindowSize = { ...COMPACT_WINDOW_SIZE };
 let guideWindowOpen = false;
+let pendingStatusBoxReveal = false;
 
 if (process.platform === 'darwin') {
   app.dock.hide();
@@ -79,6 +80,11 @@ function createWindow() {
   mainWindow.setAlwaysOnTop(true, 'floating');
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (!pendingStatusBoxReveal) return;
+    pendingStatusBoxReveal = false;
+    revealStatusBox();
+  });
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
@@ -91,14 +97,35 @@ function createWindow() {
   });
 }
 
-function showWindow() {
+function revealStatusBox() {
   if (!mainWindow || mainWindow.isDestroyed()) {
+    pendingStatusBoxReveal = true;
+    createWindow();
+    return;
+  }
+
+  if (mainWindow.webContents.isLoading()) {
+    pendingStatusBoxReveal = true;
+    return;
+  }
+
+  mainWindow.webContents.send('status-box:show', store.snapshot());
+}
+
+function showWindow(options = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    pendingStatusBoxReveal = Boolean(options.revealStatusBox);
     createWindow();
     return;
   }
 
   mainWindow.show();
   mainWindow.focus();
+  if (options.revealStatusBox) revealStatusBox();
+}
+
+function showWindowWithStatusBox() {
+  showWindow({ revealStatusBox: true });
 }
 
 function hideWindow() {
@@ -113,7 +140,7 @@ function updateTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Parrot Buddy', enabled: false },
     { type: 'separator' },
-    { label: 'Show Bird', click: showWindow },
+    { label: 'Show Bird', click: showWindowWithStatusBox },
     { label: 'Hide Bird', click: hideWindow },
     {
       label: 'Restart Agent Monitor',
@@ -189,10 +216,7 @@ function createTray() {
 
   tray = new Tray(trayIdleImage);
   tray.setToolTip('Parrot Buddy');
-  tray.on('click', () => {
-    if (mainWindow?.isVisible()) hideWindow();
-    else showWindow();
-  });
+  tray.on('click', showWindowWithStatusBox);
   updateTrayMenu();
   updateTrayActivity();
 }

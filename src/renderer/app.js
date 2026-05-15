@@ -808,4 +808,9 @@ if (closeButton) {
 
 window.buddy.onTasksChanged(render);
 window.buddy.onAgentAlert(playAlertAnimation);
+window.buddy.onStatusBoxShow((snapshot) => {
+  if (snapshot) render(snapshot);
+  setSpeechVisible(true);
+  fitSpeechToViewport();
+});
 window.buddy.getSnapshot().then(render);

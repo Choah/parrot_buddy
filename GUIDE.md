@@ -31,6 +31,7 @@ Finder나 Spotlight에서 `Parrot Buddy`를 실행하면 Dock에는 뜨지 않�
 
 메뉴바 앵무새 아이콘에서 다음 작업을 할 수 있습니다.
 
+- 메뉴바 아이콘 클릭: 앵무새 창과 현재 상태 박스 표시
 - `Show Bird`: 앵무새 보이기
 - `Hide Bird`: 앵무새 숨기기
 - `Restart Agent Monitor`: Codex/Claude 감시 재시작
