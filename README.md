@@ -8,6 +8,12 @@ Codex와 Claude Code가 지금 작업 중인지, 확인을 기다리는지, 끝�
 
 일반 터미널 전체를 감시하는 앱이 아니라, 여러 개 떠 있는 Codex / Claude Code agent 상태를 빠르게 확인하기 위한 데스크톱 pet입니다.
 
+## 데모
+
+<video src="./assets/parrot-buddy-demo.mov" controls width="720" aria-label="Parrot Buddy demo video"></video>
+
+[데모 영상 열기](./assets/parrot-buddy-demo.mov)
+
 ## 주요 기능
 
 - 여러 터미널에서 실행 중인 Codex turn을 각각 표시
