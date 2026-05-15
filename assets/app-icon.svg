@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="34%" cy="24%" r="86%">
+      <stop offset="0%" stop-color="#fff7c7"/>
+      <stop offset="58%" stop-color="#ffd84f"/>
+      <stop offset="100%" stop-color="#f09a2a"/>
+    </radialGradient>
+    <radialGradient id="face" cx="36%" cy="22%" r="78%">
+      <stop offset="0%" stop-color="#fffde6"/>
+      <stop offset="58%" stop-color="#ffe65f"/>
+      <stop offset="100%" stop-color="#f3ad27"/>
+    </radialGradient>
+    <linearGradient id="beak" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ffe3bd"/>
+      <stop offset="58%" stop-color="#f4a768"/>
+      <stop offset="100%" stop-color="#d97747"/>
+    </linearGradient>
+    <linearGradient id="lowerBeak" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ed9562"/>
+      <stop offset="100%" stop-color="#c76045"/>
+    </linearGradient>
+    <filter id="shadow" x="-18%" y="-18%" width="136%" height="142%">
+      <feDropShadow dx="0" dy="28" stdDeviation="26" flood-color="#704000" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <g filter="url(#shadow)">
+    <path d="M344 318c-48-196 96-230 162-68-42 42-96 66-162 68z" fill="#efab25"/>
+    <path d="M474 262c14-220 154-220 168 0-52 42-112 42-168 0z" fill="#ffd84f"/>
+    <path d="M608 286c86-184 226-104 160 76-66-10-120-36-160-76z" fill="#ffe56a"/>
+    <circle cx="512" cy="542" r="338" fill="url(#face)"/>
+    <path d="M229 595c70 145 164 218 283 218 121 0 218-75 287-221-42 184-151 282-287 282-135 0-242-96-283-279z" fill="#f0a426" opacity=".28"/>
+    <ellipse cx="360" cy="590" rx="70" ry="34" fill="#ff8b62" opacity=".18"/>
+    <ellipse cx="664" cy="590" rx="70" ry="34" fill="#ff8b62" opacity=".18"/>
+    <circle cx="398" cy="475" r="35" fill="#171008"/>
+    <circle cx="626" cy="475" r="35" fill="#171008"/>
+    <path d="M448 528c22-36 106-36 128 0-20 31-108 31-128 0z" fill="#ffe5c8"/>
+    <path d="M436 562c24-45 54-66 76-66s52 21 76 66c-6 66-52 108-76 128-24-20-70-62-76-128z" fill="url(#beak)"/>
+    <path d="M474 642c22 24 54 24 76 0-8 44-68 44-76 0z" fill="url(#lowerBeak)"/>
+    <path d="M474 558c22-16 54-16 76 0" fill="none" stroke="#fff3de" stroke-width="12" stroke-linecap="round" opacity=".66"/>
+  </g>
+</svg>

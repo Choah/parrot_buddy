@@ -1,0 +1,18 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('buddy', {
+  getSnapshot: () => ipcRenderer.invoke('tasks:snapshot'),
+  runCommand: (payload) => ipcRenderer.invoke('tasks:run-command', payload),
+  stopCommand: (id) => ipcRenderer.invoke('tasks:stop-command', id),
+  windowAction: (action) => ipcRenderer.invoke('window:action', action),
+  onTasksChanged: (callback) => {
+    const listener = (_event, snapshot) => callback(snapshot);
+    ipcRenderer.on('tasks:changed', listener);
+    return () => ipcRenderer.off('tasks:changed', listener);
+  },
+  onAgentAlert: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('agent:alert', listener);
+    return () => ipcRenderer.off('agent:alert', listener);
+  }
+});

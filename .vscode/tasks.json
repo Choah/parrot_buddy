@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Parrot Buddy: npm test",
+      "type": "shell",
+      "command": "/Users/a453866/Python/bot_workspace/test_kit/speckit-parrot-buddy/parrot-buddy --source vscode --label \"npm test\" -- npm test",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Parrot Buddy: sample slow pass",
+      "type": "shell",
+      "command": "/Users/a453866/Python/bot_workspace/test_kit/speckit-parrot-buddy/parrot-buddy --source vscode --label \"Slow pass\" -- node -e \"setTimeout(()=>process.exit(0), 2500)\"",
+      "problemMatcher": []
+    },
+    {
+      "label": "Parrot Buddy: sample fail",
+      "type": "shell",
+      "command": "/Users/a453866/Python/bot_workspace/test_kit/speckit-parrot-buddy/parrot-buddy --source vscode --label \"Sample fail\" -- node -e \"setTimeout(()=>process.exit(1), 1200)\"",
+      "problemMatcher": []
+    }
+  ]
+}

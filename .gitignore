@@ -1,0 +1,5 @@
+node_modules/
+.parrot-buddy.pid
+.DS_Store
+npm-debug.log*
+*.log
