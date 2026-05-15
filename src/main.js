@@ -21,7 +21,11 @@ let wanderTimer = null;
 let pokeTimer = null;
 let wanderVelocity = { x: 0.45, y: 0.28 };
 const assetPath = (...parts) => path.join(__dirname, '..', 'assets', ...parts);
-const COMPACT_WINDOW_SIZE = { width: 430, height: 292 };
+const COMPACT_WINDOW_BOUNDS = { x: 0, y: 211, width: 354, height: 132 };
+const COMPACT_WINDOW_SIZE = {
+  width: COMPACT_WINDOW_BOUNDS.width,
+  height: COMPACT_WINDOW_BOUNDS.height
+};
 const GUIDE_WINDOW_SIZE = { width: 430, height: 520 };
 const MIN_WINDOW_SIZE = { width: 128, height: 112 };
 const MAX_TRAY_STATUS_ITEMS = 6;
@@ -59,6 +63,8 @@ function notifyAgentAttention(task) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    x: COMPACT_WINDOW_BOUNDS.x,
+    y: COMPACT_WINDOW_BOUNDS.y,
     width: compactWindowSize.width,
     height: compactWindowSize.height,
     transparent: true,
@@ -402,6 +408,47 @@ function resizeWindowBy(delta = {}) {
   }
 }
 
+function fitWindowToContent(frame = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false };
+
+  const left = Number(frame.left);
+  const top = Number(frame.top);
+  const right = Number(frame.right);
+  const bottom = Number(frame.bottom);
+  if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) {
+    return { ok: false };
+  }
+
+  const margin = clamp(Number(frame.margin) || 10, 0, 80);
+  const minWidth = Math.max(MIN_WINDOW_SIZE.width, Number(frame.minWidth) || 0);
+  const minHeight = Math.max(MIN_WINDOW_SIZE.height, Number(frame.minHeight) || 0);
+  const bounds = mainWindow.getBounds();
+  const workArea = screen.getDisplayMatching(bounds).workArea;
+
+  let width = Math.round(Math.max(minWidth, right - left + margin * 2));
+  let height = Math.round(Math.max(minHeight, bottom - top + margin * 2));
+  width = Math.min(width, workArea.width);
+  height = Math.min(height, workArea.height);
+
+  const maxX = workArea.x + workArea.width - width;
+  const maxY = workArea.y + workArea.height - height;
+  const x = Math.round(clamp(bounds.x + left - margin, workArea.x, maxX));
+  const y = Math.round(clamp(bounds.y + top - margin, workArea.y, maxY));
+  const nextBounds = { x, y, width, height };
+
+  mainWindow.setBounds(nextBounds, false);
+  if (frame.persistCompact !== false && !guideWindowOpen) {
+    compactWindowSize = { width, height };
+  }
+
+  return {
+    ok: true,
+    dx: x - bounds.x,
+    dy: y - bounds.y,
+    bounds: nextBounds
+  };
+}
+
 function runCommand({ label, command, cwd }) {
   if (!command || !command.trim()) {
     throw new Error('Command is required');
@@ -531,6 +578,7 @@ ipcMain.handle('window:action', (_event, action) => {
   if (actionType === 'resume-wander') startWander();
   if (actionType === 'move-by') moveWindowBy(action);
   if (actionType === 'resize-by') resizeWindowBy(action);
+  if (actionType === 'fit-to-content') return fitWindowToContent(action);
   if (actionType === 'guide-mode') {
     guideWindowOpen = Boolean(action.open);
     setWindowSize(guideWindowOpen ? GUIDE_WINDOW_SIZE : compactWindowSize);

@@ -18,10 +18,13 @@ const speechResizeLeftHandle = document.getElementById('speechResizeLeftHandle')
 const birdStage = document.querySelector('.bird-stage');
 const windowFrameEditor = document.getElementById('windowFrameEditor');
 const windowResizeHandles = document.querySelectorAll('.window-resize-handle');
-const layoutStorageKey = 'parrotBuddyLayoutV5';
+const layoutStorageKey = 'parrotBuddyLayoutV6';
 const enableSpeechFloating = false;
 const speechMargin = 8;
 const speechMinSize = { width: 96, height: 40 };
+const windowFitMargin = 10;
+let windowFitTimer = null;
+let fittingWindow = false;
 let windowEditMode = false;
 let windowFrameResize = null;
 
@@ -239,6 +242,13 @@ function toggleGuide() {
   window.buddy.windowAction({ type: 'guide-mode', open: !guidePanel.hidden });
 }
 
+function openGuide() {
+  if (!guidePanel.hidden) return;
+  guidePanel.hidden = false;
+  requestAnimationFrame(clampFloatingLayout);
+  window.buddy.windowAction({ type: 'guide-mode', open: true });
+}
+
 function closeGuide() {
   guidePanel.hidden = true;
   window.buddy.windowAction({ type: 'guide-mode', open: false });
@@ -255,7 +265,11 @@ function setWindowEditMode(enabled) {
 }
 
 if (guideButton) {
-  guideButton.addEventListener('click', toggleGuide);
+  guideButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openGuide();
+  });
 }
 
 if (guideCloseButton) {
@@ -306,12 +320,12 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function moveFloatingElementTo(element, left, top) {
+function moveFloatingElementTo(element, left, top, { margin = 8 } = {}) {
   const rect = element.getBoundingClientRect();
-  const maxLeft = window.innerWidth - rect.width - 8;
-  const maxTop = window.innerHeight - rect.height - 8;
-  element.style.left = `${Math.round(clamp(left, 8, Math.max(8, maxLeft)))}px`;
-  element.style.top = `${Math.round(clamp(top, 8, Math.max(8, maxTop)))}px`;
+  const maxLeft = window.innerWidth - rect.width - margin;
+  const maxTop = window.innerHeight - rect.height - margin;
+  element.style.left = `${Math.round(clamp(left, margin, Math.max(margin, maxLeft)))}px`;
+  element.style.top = `${Math.round(clamp(top, margin, Math.max(margin, maxTop)))}px`;
   element.style.right = 'auto';
   element.style.bottom = 'auto';
   element.style.transform = 'none';
@@ -328,7 +342,7 @@ function moveGuideTo(left, top) {
 }
 
 function moveSpeechTo(left, top) {
-  moveFloatingElementTo(speech, left, top);
+  moveFloatingElementTo(speech, left, top, { margin: 0 });
   writeLayout({
     speech: {
       ...readLayout().speech,
@@ -338,13 +352,17 @@ function moveSpeechTo(left, top) {
   });
 }
 
-function moveBirdTo(left, top) {
+function moveBirdTo(left, top, { clampToWindow = true } = {}) {
   const stageRect = birdStage.getBoundingClientRect();
   const birdRect = parrot.getBoundingClientRect();
   const offsetX = birdRect.left - stageRect.left;
   const offsetY = birdRect.top - stageRect.top;
-  const nextBirdLeft = Math.round(clamp(left, 0, Math.max(0, window.innerWidth - birdRect.width)));
-  const nextBirdTop = Math.round(clamp(top, 0, Math.max(0, window.innerHeight - birdRect.height)));
+  const nextBirdLeft = Math.round(clampToWindow
+    ? clamp(left, 0, Math.max(0, window.innerWidth - birdRect.width))
+    : left);
+  const nextBirdTop = Math.round(clampToWindow
+    ? clamp(top, 0, Math.max(0, window.innerHeight - birdRect.height))
+    : top);
 
   birdStage.style.left = `${nextBirdLeft - offsetX}px`;
   birdStage.style.top = `${nextBirdTop - offsetY}px`;
@@ -358,6 +376,108 @@ function moveBirdTo(left, top) {
       top: parseFloat(birdStage.style.top)
     }
   });
+}
+
+function captureContentRects() {
+  const rects = [];
+
+  if (speech && !speech.hidden) {
+    rects.push({ key: 'speech', rect: speech.getBoundingClientRect() });
+  }
+
+  if (parrot) {
+    const rect = parrot.getBoundingClientRect();
+    rects.push({
+      key: 'bird',
+      rect,
+      fitRect: {
+        left: rect.left - 8,
+        top: rect.top - 8,
+        right: rect.right + 8,
+        bottom: rect.bottom + 8
+      }
+    });
+  }
+
+  if (guidePanel && !guidePanel.hidden) {
+    rects.push({ key: 'guide', rect: guidePanel.getBoundingClientRect() });
+  }
+
+  return rects.filter(({ rect }) => rect.width > 0 && rect.height > 0);
+}
+
+function contentBoundsFrom(rects) {
+  if (rects.length === 0) return null;
+  return rects.reduce((bounds, item) => {
+    const rect = item.fitRect || item.rect;
+    return {
+      left: Math.min(bounds.left, rect.left),
+      top: Math.min(bounds.top, rect.top),
+      right: Math.max(bounds.right, rect.right),
+      bottom: Math.max(bounds.bottom, rect.bottom)
+    };
+  }, {
+    left: Infinity,
+    top: Infinity,
+    right: -Infinity,
+    bottom: -Infinity
+  });
+}
+
+function rectForKey(rects, key) {
+  return rects.find((item) => item.key === key)?.rect;
+}
+
+function shiftContentAfterWindowFit(rects, dx, dy) {
+  if (!dx && !dy) return;
+
+  const speechRect = rectForKey(rects, 'speech');
+  if (speechRect && speech && !speech.hidden) {
+    moveSpeechTo(speechRect.left - dx, speechRect.top - dy);
+  }
+
+  const guideRect = rectForKey(rects, 'guide');
+  if (guideRect && guidePanel && !guidePanel.hidden) {
+    moveGuideTo(guideRect.left - dx, guideRect.top - dy);
+  }
+
+  const birdRect = rectForKey(rects, 'bird');
+  if (birdRect && birdStage) {
+    moveBirdTo(birdRect.left - dx, birdRect.top - dy, { clampToWindow: false });
+  }
+}
+
+async function fitWindowToContent({ persistCompact = true } = {}) {
+  if (fittingWindow) return;
+
+  const rects = captureContentRects();
+  const bounds = contentBoundsFrom(rects);
+  if (!bounds) return;
+
+  fittingWindow = true;
+  try {
+    const result = await window.buddy.windowAction({
+      type: 'fit-to-content',
+      ...bounds,
+      margin: windowFitMargin,
+      minWidth: guidePanel && !guidePanel.hidden ? 360 : 128,
+      minHeight: guidePanel && !guidePanel.hidden ? 300 : 112,
+      persistCompact
+    });
+
+    if (result?.ok) {
+      shiftContentAfterWindowFit(rects, result.dx || 0, result.dy || 0);
+    }
+  } finally {
+    fittingWindow = false;
+  }
+}
+
+function scheduleWindowFit(options) {
+  clearTimeout(windowFitTimer);
+  windowFitTimer = setTimeout(() => {
+    fitWindowToContent(options);
+  }, 50);
 }
 
 function setSpeechVisible(visible, persist = true) {
@@ -375,6 +495,7 @@ function setSpeechVisible(visible, persist = true) {
       hidden: !visible
     }
   });
+  scheduleWindowFit();
 }
 
 function speechMinWidth() {
@@ -385,15 +506,17 @@ function speechMinHeight() {
   return Math.min(speechMinSize.height, Math.max(32, window.innerHeight - speechMargin * 2));
 }
 
-function resizeSpeechTo(width, height, left = null) {
+function resizeSpeechTo(width, height, left = null, { allowOverflow = false } = {}) {
   const rect = speech.getBoundingClientRect();
   const minWidth = speechMinWidth();
   const minHeight = speechMinHeight();
   const nextLeft = Number.isFinite(left)
-    ? Math.round(clamp(left, speechMargin, Math.max(speechMargin, window.innerWidth - minWidth - speechMargin)))
+    ? Math.round(allowOverflow
+      ? clamp(left, -720, window.innerWidth - minWidth)
+      : clamp(left, speechMargin, Math.max(speechMargin, window.innerWidth - minWidth - speechMargin)))
     : rect.left;
-  const maxWidth = Math.max(minWidth, window.innerWidth - nextLeft - speechMargin);
-  const maxHeight = Math.max(minHeight, window.innerHeight - rect.top - speechMargin);
+  const maxWidth = allowOverflow ? 720 : Math.max(minWidth, window.innerWidth - nextLeft - speechMargin);
+  const maxHeight = allowOverflow ? 420 : Math.max(minHeight, window.innerHeight - rect.top - speechMargin);
   const nextWidth = Math.round(clamp(width, minWidth, maxWidth));
   const nextHeight = Math.round(clamp(height, minHeight, maxHeight));
   if (Number.isFinite(left)) speech.style.left = `${nextLeft}px`;
@@ -472,7 +595,10 @@ function clampFloatingLayout() {
 }
 
 restoreFloatingLayout();
-window.addEventListener('resize', () => requestAnimationFrame(clampFloatingLayout));
+window.addEventListener('resize', () => {
+  if (fittingWindow) return;
+  requestAnimationFrame(clampFloatingLayout);
+});
 
 if (enableSpeechFloating && speech) {
   speech.addEventListener('pointerdown', (event) => {
@@ -535,25 +661,26 @@ function setupSpeechResizeHandle(handle, edge) {
     const dy = event.clientY - speechResize.startY;
     if (speechResize.edge === 'left') {
       const right = speechResize.left + speechResize.width;
-      const minWidth = speechMinWidth();
-      const minLeft = Math.max(speechMargin, right - (window.innerWidth - speechMargin * 2));
-      const maxLeft = Math.max(minLeft, right - minWidth);
-      const nextLeft = clamp(speechResize.left + dx, minLeft, maxLeft);
+      const nextLeft = speechResize.left + dx;
       resizeSpeechTo(
         right - nextLeft,
         speechResize.height + dy,
-        nextLeft
+        nextLeft,
+        { allowOverflow: true }
       );
+      scheduleWindowFit();
       return;
     }
 
-    resizeSpeechTo(speechResize.width + dx, speechResize.height + dy);
+    resizeSpeechTo(speechResize.width + dx, speechResize.height + dy, null, { allowOverflow: true });
+    scheduleWindowFit();
   });
 
   const stopSpeechResize = (event) => {
     if (!speechResize || speechResize.pointerId !== event.pointerId) return;
     handle.releasePointerCapture(event.pointerId);
     speechResize = null;
+    scheduleWindowFit();
   };
 
   handle.addEventListener('pointerup', stopSpeechResize);
@@ -655,13 +782,10 @@ const guideHeader = guidePanel?.querySelector('.guide-header');
 if (guideHeader) {
   guideHeader.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || event.target.closest('button')) return;
-    const rect = guidePanel.getBoundingClientRect();
     guideDrag = {
       pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      left: rect.left,
-      top: rect.top
+      lastScreenX: event.screenX,
+      lastScreenY: event.screenY
     };
     guideHeader.setPointerCapture(event.pointerId);
     guideHeader.classList.add('dragging');
@@ -670,10 +794,11 @@ if (guideHeader) {
 
   guideHeader.addEventListener('pointermove', (event) => {
     if (!guideDrag || guideDrag.pointerId !== event.pointerId) return;
-    moveGuideTo(
-      guideDrag.left + event.clientX - guideDrag.startX,
-      guideDrag.top + event.clientY - guideDrag.startY
-    );
+    const dx = event.screenX - guideDrag.lastScreenX;
+    const dy = event.screenY - guideDrag.lastScreenY;
+    guideDrag.lastScreenX = event.screenX;
+    guideDrag.lastScreenY = event.screenY;
+    window.buddy.windowAction({ type: 'move-by', dx, dy });
   });
 
   const stopGuideDrag = (event) => {
@@ -717,29 +842,31 @@ birdDragSurface.addEventListener('pointerdown', (event) => {
 birdDragSurface.addEventListener('pointermove', (event) => {
   if (!birdDrag || birdDrag.pointerId !== event.pointerId) return;
 
-  const dx = event.clientX - birdDrag.startX;
-  const dy = event.clientY - birdDrag.startY;
-  birdDrag.totalDistance += Math.hypot(dx, dy);
+  const moveX = event.screenX - birdDrag.lastScreenX;
+  const moveY = event.screenY - birdDrag.lastScreenY;
+  birdDrag.lastScreenX = event.screenX;
+  birdDrag.lastScreenY = event.screenY;
+  birdDrag.totalDistance += Math.hypot(moveX, moveY);
 
   if (birdDrag.totalDistance <= 4) return;
   birdDrag.moved = true;
   if (birdDrag.mode === 'window') {
-    const moveX = event.screenX - birdDrag.lastScreenX;
-    const moveY = event.screenY - birdDrag.lastScreenY;
-    birdDrag.lastScreenX = event.screenX;
-    birdDrag.lastScreenY = event.screenY;
     window.buddy.windowAction({ type: 'move-by', dx: moveX, dy: moveY });
     return;
   }
 
-  moveBirdTo(birdDrag.left + dx, birdDrag.top + dy);
+  const rect = parrot.getBoundingClientRect();
+  moveBirdTo(rect.left + moveX, rect.top + moveY, { clampToWindow: false });
+  scheduleWindowFit();
 });
 
 function stopBirdDrag(event) {
   if (!birdDrag || birdDrag.pointerId !== event.pointerId) return;
+  const movedBirdOnly = birdDrag.moved && birdDrag.mode === 'bird';
   birdDragSurface.releasePointerCapture(event.pointerId);
   suppressNextParrotClick = birdDrag.moved;
   birdDrag = null;
+  if (movedBirdOnly) scheduleWindowFit();
   if (suppressNextParrotClick) {
     setTimeout(() => {
       suppressNextParrotClick = false;
@@ -805,6 +932,8 @@ birdDragSurface.addEventListener('click', (event) => {
 if (closeButton) {
   closeButton.addEventListener('click', () => window.buddy.windowAction('close'));
 }
+
+setWindowEditMode(true);
 
 window.buddy.onTasksChanged(render);
 window.buddy.onAgentAlert(playAlertAnimation);

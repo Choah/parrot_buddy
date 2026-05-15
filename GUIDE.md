@@ -23,9 +23,9 @@ npm run stop
 npm run install:app
 ```
 
-설치 위치는 `~/Applications/Parrot Buddy.app`입니다.
+기본 설치 위치는 `/Applications/Parrot Buddy.app`입니다. `/Applications`에 쓸 권한이 없으면 자동으로 `~/Applications/Parrot Buddy.app`에 설치됩니다.
 
-Finder나 Spotlight에서 `Parrot Buddy`를 실행하면 Dock에는 뜨지 않고 메뉴바에 작은 앵무새 아이콘이 생깁니다.
+Finder의 Applications에서 `Parrot Buddy.app`을 열거나 Spotlight에서 `Parrot Buddy`를 실행하면 Dock에는 뜨지 않고 메뉴바에 작은 앵무새 아이콘이 생깁니다.
 
 ## 3. 메뉴바 사용
 
@@ -44,12 +44,16 @@ Codex 또는 Claude Code가 작업 중이거나 확인을 기다리는 동안에
 - 상태 박스 드래그: 앱 창 전체 이동
 - 상태 박스 왼쪽/오른쪽 아래 핸들: 박스 크기 조정
 - 상태 박스 오른쪽 위 `×`: 상태 박스 숨기기
+- 흰색 `window size` 외곽선: 실제 Parrot Buddy 창 크기. 이 영역은 투명해 보여도 뒤 앱 클릭을 막을 수 있어 최소 크기로 유지하는 게 좋음
+- `window size` 옆 `guide` 버튼 클릭: guide 열기
+- 앵무새 이동/상태 박스 크기 조절 후: 흰색 창 영역이 내용에 맞춰 자동 최적화
 - 앵무새 드래그: 창 안에서 앵무새 위치 조정
 - Command를 누른 채 앵무새 드래그: 앱 창 전체 이동
+- Guide 제목 줄 드래그: 앱 창 전체 이동
 - 앵무새 클릭: 또잉 애니메이션
 - 상태 박스가 숨겨진 상태에서 앵무새 클릭: 상태 박스 다시 표시
 - 앵무새 빠르게 3번 클릭: guide 열기/닫기
-- 앵무새 우클릭 또는 Option을 누른 채 앵무새 클릭: 실제 투명 창 외곽선 표시
+- 앵무새 우클릭 또는 Option을 누른 채 앵무새 클릭: 흰색 `window size` 외곽선 숨기기/다시 표시
 - 외곽선 모서리 드래그: 클릭을 막는 투명 창 영역 크기 조정. 상태 박스도 작은 창 크기에 맞춰 줄어듦
 - Esc: guide 또는 창 크기 조정 모드 닫기
 
