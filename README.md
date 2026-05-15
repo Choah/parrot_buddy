@@ -12,8 +12,6 @@ Codex와 Claude Code가 지금 작업 중인지, 확인을 기다리는지, 끝�
 
 <img src="./assets/parrot-buddy-demo.gif" width="720" alt="Parrot Buddy demo" />
 
-[전체 데모 영상 열기](./assets/parrot-buddy-demo.mov)
-
 ## 주요 기능
 
 - 여러 터미널에서 실행 중인 Codex turn을 각각 표시
