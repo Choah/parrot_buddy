@@ -1,7 +1,7 @@
 # Parrot Buddy
 
 <p align="center">
-  <img src="./assets/readme-parrot.svg" width="360" alt="Parrot Buddy yellow parrot face" />
+  <img src="./assets/app-icon.png" width="180" alt="Parrot Buddy app icon" />
 </p>
 
 Codex와 Claude Code가 지금 작업 중인지, 확인을 기다리는지, 끝났는지 보여주는 작은 macOS 메뉴바 앵무새입니다.
