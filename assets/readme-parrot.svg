@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-label="Parrot Buddy yellow parrot face on a white background">
+  <defs>
+    <radialGradient id="face" cx="34%" cy="18%" r="76%">
+      <stop offset="0%" stop-color="#fffde6"/>
+      <stop offset="52%" stop-color="#ffe764"/>
+      <stop offset="100%" stop-color="#f2ad27"/>
+    </radialGradient>
+    <radialGradient id="cheek" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#ff8f86" stop-opacity=".46"/>
+      <stop offset="100%" stop-color="#ff8f86" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="beak" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ffe7c8"/>
+      <stop offset="55%" stop-color="#f2a46f"/>
+      <stop offset="100%" stop-color="#d97854"/>
+    </linearGradient>
+    <linearGradient id="lowerBeak" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f6ad83"/>
+      <stop offset="100%" stop-color="#c9684f"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="145%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#7a4c09" flood-opacity=".18"/>
+    </filter>
+  </defs>
+
+  <rect width="900" height="520" rx="42" fill="#fff"/>
+  <rect x="16" y="16" width="868" height="488" rx="34" fill="#fff" stroke="#f1ead8" stroke-width="2"/>
+
+  <g filter="url(#softShadow)">
+    <ellipse cx="450" cy="462" rx="176" ry="20" fill="#6b4207" opacity=".12"/>
+
+    <path d="M308 142c-44-154 80-184 134-54-35 36-78 55-134 54z" fill="#efab25"/>
+    <path d="M414 94c9-175 122-176 134 0-40 34-94 34-134 0z" fill="#ffd84f"/>
+    <path d="M515 124c74-145 184-78 126 60-52-8-94-28-126-60z" fill="#ffe56a"/>
+
+    <circle cx="450" cy="282" r="182" fill="url(#face)"/>
+    <path d="M266 322c48 92 108 138 184 138 78 0 140-47 184-140-28 116-98 178-184 178-86 0-154-61-184-176z" fill="#ef9d22" opacity=".22"/>
+    <ellipse cx="352" cy="312" rx="62" ry="38" fill="url(#cheek)"/>
+    <ellipse cx="548" cy="312" rx="62" ry="38" fill="url(#cheek)"/>
+
+    <circle cx="374" cy="244" r="25" fill="#171008"/>
+    <circle cx="526" cy="244" r="25" fill="#171008"/>
+    <circle cx="365" cy="235" r="6" fill="#fff7df" opacity=".72"/>
+    <circle cx="517" cy="235" r="6" fill="#fff7df" opacity=".72"/>
+
+    <path d="M398 288c20-34 84-34 104 0-18 28-86 28-104 0z" fill="#ffe8cf"/>
+    <path d="M388 314c22-43 48-62 62-62s40 19 62 62c-5 61-43 98-62 116-19-18-57-55-62-116z" fill="url(#beak)"/>
+    <path d="M421 386c17 19 41 19 58 0-7 35-51 35-58 0z" fill="url(#lowerBeak)"/>
+    <path d="M418 310c18-15 46-15 64 0" fill="none" stroke="#fff4df" stroke-width="10" stroke-linecap="round" opacity=".72"/>
+  </g>
+</svg>
