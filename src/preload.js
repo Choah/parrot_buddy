@@ -14,10 +14,5 @@ contextBridge.exposeInMainWorld('buddy', {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('agent:alert', listener);
     return () => ipcRenderer.off('agent:alert', listener);
-  },
-  onStatusBoxShow: (callback) => {
-    const listener = (_event, snapshot) => callback(snapshot);
-    ipcRenderer.on('status-box:show', listener);
-    return () => ipcRenderer.off('status-box:show', listener);
   }
 });

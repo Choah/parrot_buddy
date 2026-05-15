@@ -24,9 +24,9 @@ const assetPath = (...parts) => path.join(__dirname, '..', 'assets', ...parts);
 const COMPACT_WINDOW_SIZE = { width: 430, height: 292 };
 const GUIDE_WINDOW_SIZE = { width: 430, height: 520 };
 const MIN_WINDOW_SIZE = { width: 128, height: 112 };
+const MAX_TRAY_STATUS_ITEMS = 6;
 let compactWindowSize = { ...COMPACT_WINDOW_SIZE };
 let guideWindowOpen = false;
-let pendingStatusBoxReveal = false;
 
 if (process.platform === 'darwin') {
   app.dock.hide();
@@ -80,11 +80,6 @@ function createWindow() {
   mainWindow.setAlwaysOnTop(true, 'floating');
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (!pendingStatusBoxReveal) return;
-    pendingStatusBoxReveal = false;
-    revealStatusBox();
-  });
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
@@ -97,35 +92,14 @@ function createWindow() {
   });
 }
 
-function revealStatusBox() {
+function showWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
-    pendingStatusBoxReveal = true;
-    createWindow();
-    return;
-  }
-
-  if (mainWindow.webContents.isLoading()) {
-    pendingStatusBoxReveal = true;
-    return;
-  }
-
-  mainWindow.webContents.send('status-box:show', store.snapshot());
-}
-
-function showWindow(options = {}) {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    pendingStatusBoxReveal = Boolean(options.revealStatusBox);
     createWindow();
     return;
   }
 
   mainWindow.show();
   mainWindow.focus();
-  if (options.revealStatusBox) revealStatusBox();
-}
-
-function showWindowWithStatusBox() {
-  showWindow({ revealStatusBox: true });
 }
 
 function hideWindow() {
@@ -134,13 +108,84 @@ function hideWindow() {
   stopWander();
 }
 
-function updateTrayMenu() {
-  if (!tray) return;
+function truncateLabel(value, maxLength = 48) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}…`;
+}
 
-  tray.setContextMenu(Menu.buildFromTemplate([
+function agentStatusWord(status) {
+  if (status === 'hitl') return 'confirm';
+  if (status === 'running') return 'working';
+  if (status === 'waiting' || status === 'success') return 'ready';
+  if (status === 'failed') return 'check';
+  return 'stopped';
+}
+
+function agentName(task) {
+  const label = String(task?.label || '');
+  const command = String(task?.command || '');
+
+  const codexTurn = label.match(/^Codex:\s*([^#]+?)(?:\s*#(.+))?$/);
+  if (codexTurn) {
+    const suffix = codexTurn[2] ? ` #${codexTurn[2].trim()}` : '';
+    return `Codex · ${codexTurn[1].trim()}${suffix}`;
+  }
+
+  const codexTerminal = label.match(/^Codex Terminal:\s*(.+)$/);
+  if (codexTerminal) {
+    const pid = command.match(/pid\s+(\d+)/);
+    return `Codex terminal · ${codexTerminal[1].trim()}${pid ? ` #${pid[1]}` : ''}`;
+  }
+
+  const claude = label.match(/^Claude:\s*(.+)$/);
+  if (claude) return `Claude Code · ${claude[1].trim()}`;
+
+  if (label === 'Codex VS Code') return 'Codex VS Code';
+  if (label === 'Claude Code') return 'Claude Code';
+
+  const homePath = command.match(/(?:^|~\/|\/)([^/·\s]+)\s*·/);
+  return homePath ? homePath[1] : label || 'Agent';
+}
+
+function visibleTrayTasks(snapshot = store.snapshot()) {
+  return snapshot.tasks
+    .filter((task) => task.source === 'agent')
+    .filter((task) => task.status !== 'success' && task.status !== 'stopped');
+}
+
+function traySummaryLabel(snapshot = store.snapshot()) {
+  const summary = snapshot.summary || {};
+  if (summary.agentHitlCount > 0) return `Status: confirm needed (${summary.agentHitlCount})`;
+  if (summary.agentRunningCount > 0) return `Status: working (${summary.agentRunningCount})`;
+  if (summary.agentReadyCount > 0) return `Status: ready (${summary.agentReadyCount})`;
+  return 'Status: no active agents';
+}
+
+function buildTrayMenu(snapshot = store.snapshot()) {
+  const statusItems = visibleTrayTasks(snapshot)
+    .slice(0, MAX_TRAY_STATUS_ITEMS)
+    .map((task) => ({
+      label: truncateLabel(`${agentStatusWord(task.status)} · ${agentName(task)}`),
+      enabled: false
+    }));
+
+  if (statusItems.length === 0) {
+    statusItems.push({ label: 'Codex / Claude Code waiting', enabled: false });
+  }
+
+  const hiddenCount = visibleTrayTasks(snapshot).length - statusItems.length;
+  if (hiddenCount > 0) {
+    statusItems.push({ label: `${hiddenCount} more…`, enabled: false });
+  }
+
+  return Menu.buildFromTemplate([
     { label: 'Parrot Buddy', enabled: false },
+    { label: traySummaryLabel(snapshot), enabled: false },
     { type: 'separator' },
-    { label: 'Show Bird', click: showWindowWithStatusBox },
+    ...statusItems,
+    { type: 'separator' },
+    { label: 'Show Floating Bird', click: showWindow },
     { label: 'Hide Bird', click: hideWindow },
     {
       label: 'Restart Agent Monitor',
@@ -157,7 +202,17 @@ function updateTrayMenu() {
         app.quit();
       }
     }
-  ]));
+  ]);
+}
+
+function updateTrayMenu(snapshot = store.snapshot()) {
+  if (!tray) return;
+  tray.setContextMenu(buildTrayMenu(snapshot));
+}
+
+function showTrayMenu() {
+  if (!tray) return;
+  tray.popUpContextMenu(buildTrayMenu());
 }
 
 function loadTrayImage(filename, fallbackFilename = 'app-icon.png') {
@@ -216,7 +271,7 @@ function createTray() {
 
   tray = new Tray(trayIdleImage);
   tray.setToolTip('Parrot Buddy');
-  tray.on('click', showWindowWithStatusBox);
+  tray.on('click', showTrayMenu);
   updateTrayMenu();
   updateTrayActivity();
 }
@@ -417,6 +472,7 @@ async function startApiServer() {
 
 app.whenReady().then(async () => {
   store.on('change', broadcastSnapshot);
+  store.on('change', updateTrayMenu);
   store.on('change', updateTrayActivity);
   await startApiServer();
   agentMonitor = new AgentMonitor({
