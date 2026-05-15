@@ -84,6 +84,67 @@ test('parses generic Codex activity events so active turns do not go stale while
   assert.equal(event.turnId, 'turn-activity');
 });
 
+test('parses Codex user interruptions as stopped turns', () => {
+  const event = parseCodexEventLine(JSON.stringify({
+    timestamp: '2026-05-15T09:45:39.015Z',
+    type: 'event_msg',
+    payload: {
+      type: 'turn_aborted',
+      turn_id: 'turn-aborted',
+      reason: 'interrupted',
+      completed_at: 1778838339,
+      duration_ms: 326530
+    }
+  }));
+
+  assert.equal(event.type, 'turn_aborted');
+  assert.equal(event.turnId, 'turn-aborted');
+  assert.equal(event.status, 'stopped');
+  assert.equal(event.message, 'Interrupted: interrupted');
+});
+
+test('removes active Codex turns immediately when the user interrupts them', () => {
+  const store = new TaskStore();
+  const monitor = new AgentMonitor({ store, pollMs: 999999 });
+  const mtime = Date.now();
+
+  monitor.applyCodexEvent({
+    type: 'turn_context',
+    turnId: 'turn-aborted',
+    cwd: '/tmp/test_kit',
+    filePath: '/tmp/aborted.jsonl',
+    fileMtimeMs: mtime
+  });
+  monitor.applyCodexEvent({
+    type: 'task_started',
+    turnId: 'turn-aborted',
+    startedAt: new Date(mtime - 1000).toISOString(),
+    filePath: '/tmp/aborted.jsonl',
+    fileMtimeMs: mtime
+  });
+  monitor.updateCodexTask([
+    '101 /opt/homebrew/bin/codex codex --dangerously-bypass-approvals-and-sandbox'
+  ]);
+  assert.equal(store.snapshot().tasks.some((task) => task.id === 'codex-turn-turn-aborted'), true);
+
+  monitor.applyCodexEvent({
+    type: 'turn_aborted',
+    turnId: 'turn-aborted',
+    status: 'stopped',
+    message: 'Interrupted: interrupted',
+    finishedAt: new Date(mtime).toISOString(),
+    filePath: '/tmp/aborted.jsonl',
+    fileMtimeMs: mtime
+  });
+  monitor.updateCodexTask([
+    '101 /opt/homebrew/bin/codex codex --dangerously-bypass-approvals-and-sandbox'
+  ]);
+
+  assert.equal(monitor.codexActiveTurns.has('turn-aborted'), false);
+  assert.equal(monitor.codexCompletedTurns.get('turn-aborted').status, 'stopped');
+  assert.equal(store.snapshot().tasks.some((task) => task.id === 'codex-turn-turn-aborted'), false);
+});
+
 test('shows multiple active Codex turns and omits completed history from the task list', () => {
   const store = new TaskStore();
   const monitor = new AgentMonitor({ store, pollMs: 999999 });

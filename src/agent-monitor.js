@@ -169,6 +169,17 @@ function parseCodexEventLine(line) {
     };
   }
 
+  if (entry.type === 'event_msg' && payload.type === 'turn_aborted' && payload.turn_id) {
+    return {
+      type: 'turn_aborted',
+      turnId: payload.turn_id,
+      finishedAt: toIsoFromSeconds(payload.completed_at),
+      durationMs: Number.isFinite(payload.duration_ms) ? payload.duration_ms : null,
+      status: 'stopped',
+      message: payload.reason ? `Interrupted: ${payload.reason}` : 'Interrupted'
+    };
+  }
+
   if (entry.type === 'turn_context' && payload.turn_id) {
     return {
       type: 'turn_context',
@@ -621,7 +632,7 @@ class AgentMonitor {
       return;
     }
 
-    if (event.type === 'task_complete') {
+    if (event.type === 'task_complete' || event.type === 'turn_aborted') {
       this.fileLastTurnIds.set(event.filePath, event.turnId);
       this.codexActiveTurns.delete(event.turnId);
       this.codexCompletedTurns.set(event.turnId, {
