@@ -12,6 +12,7 @@ const guidePanel = document.getElementById('guidePanel');
 const guideCloseButton = document.getElementById('guideCloseButton');
 const closeButton = document.getElementById('closeButton');
 const speech = document.querySelector('.speech');
+const speechHideButton = document.getElementById('speechHideButton');
 const speechResizeHandle = document.getElementById('speechResizeHandle');
 const speechResizeLeftHandle = document.getElementById('speechResizeLeftHandle');
 const birdStage = document.querySelector('.bird-stage');
@@ -19,6 +20,8 @@ const windowFrameEditor = document.getElementById('windowFrameEditor');
 const windowResizeHandles = document.querySelectorAll('.window-resize-handle');
 const layoutStorageKey = 'parrotBuddyLayoutV5';
 const enableSpeechFloating = false;
+const speechMargin = 8;
+const speechMinSize = { width: 96, height: 40 };
 let windowEditMode = false;
 let windowFrameResize = null;
 
@@ -336,7 +339,19 @@ function moveSpeechTo(left, top) {
 }
 
 function moveBirdTo(left, top) {
-  moveFloatingElementTo(birdStage, left, top);
+  const stageRect = birdStage.getBoundingClientRect();
+  const birdRect = parrot.getBoundingClientRect();
+  const offsetX = birdRect.left - stageRect.left;
+  const offsetY = birdRect.top - stageRect.top;
+  const nextBirdLeft = Math.round(clamp(left, 0, Math.max(0, window.innerWidth - birdRect.width)));
+  const nextBirdTop = Math.round(clamp(top, 0, Math.max(0, window.innerHeight - birdRect.height)));
+
+  birdStage.style.left = `${nextBirdLeft - offsetX}px`;
+  birdStage.style.top = `${nextBirdTop - offsetY}px`;
+  birdStage.style.right = 'auto';
+  birdStage.style.bottom = 'auto';
+  birdStage.style.transform = 'none';
+
   writeLayout({
     bird: {
       left: parseFloat(birdStage.style.left),
@@ -345,15 +360,40 @@ function moveBirdTo(left, top) {
   });
 }
 
+function setSpeechVisible(visible, persist = true) {
+  if (!speech) return;
+  speech.hidden = !visible;
+  if (!visible) {
+    speech.classList.remove('dragging');
+    windowDrag = null;
+    speechResize = null;
+  }
+  if (!persist) return;
+  writeLayout({
+    speech: {
+      ...readLayout().speech,
+      hidden: !visible
+    }
+  });
+}
+
+function speechMinWidth() {
+  return Math.min(speechMinSize.width, Math.max(64, window.innerWidth - speechMargin * 2));
+}
+
+function speechMinHeight() {
+  return Math.min(speechMinSize.height, Math.max(32, window.innerHeight - speechMargin * 2));
+}
+
 function resizeSpeechTo(width, height, left = null) {
   const rect = speech.getBoundingClientRect();
-  const minWidth = 190;
-  const minHeight = 56;
+  const minWidth = speechMinWidth();
+  const minHeight = speechMinHeight();
   const nextLeft = Number.isFinite(left)
-    ? Math.round(clamp(left, 8, window.innerWidth - minWidth - 8))
+    ? Math.round(clamp(left, speechMargin, Math.max(speechMargin, window.innerWidth - minWidth - speechMargin)))
     : rect.left;
-  const maxWidth = Math.max(minWidth, window.innerWidth - nextLeft - 8);
-  const maxHeight = Math.max(minHeight, window.innerHeight - rect.top - 8);
+  const maxWidth = Math.max(minWidth, window.innerWidth - nextLeft - speechMargin);
+  const maxHeight = Math.max(minHeight, window.innerHeight - rect.top - speechMargin);
   const nextWidth = Math.round(clamp(width, minWidth, maxWidth));
   const nextHeight = Math.round(clamp(height, minHeight, maxHeight));
   if (Number.isFinite(left)) speech.style.left = `${nextLeft}px`;
@@ -370,6 +410,12 @@ function resizeSpeechTo(width, height, left = null) {
   });
 }
 
+function fitSpeechToViewport() {
+  if (!speech || speech.hidden) return;
+  const rect = speech.getBoundingClientRect();
+  resizeSpeechTo(rect.width, rect.height, rect.left);
+}
+
 function restoreFloatingLayout() {
   const layout = readLayout();
 
@@ -377,6 +423,7 @@ function restoreFloatingLayout() {
     if (Number.isFinite(layout.speech.left)) speech.style.left = `${layout.speech.left}px`;
     if (Number.isFinite(layout.speech.width)) speech.style.width = `${layout.speech.width}px`;
     if (Number.isFinite(layout.speech.height)) speech.style.height = `${layout.speech.height}px`;
+    if (typeof layout.speech.hidden === 'boolean') setSpeechVisible(!layout.speech.hidden, false);
     if (enableSpeechFloating && Number.isFinite(layout.speech.left) && Number.isFinite(layout.speech.top)) {
       moveFloatingElementTo(speech, layout.speech.left, layout.speech.top);
     }
@@ -394,7 +441,13 @@ function restoreFloatingLayout() {
 
   if (layout.bird && birdStage) {
     if (Number.isFinite(layout.bird.left) && Number.isFinite(layout.bird.top)) {
-      moveFloatingElementTo(birdStage, layout.bird.left, layout.bird.top);
+      birdStage.style.left = `${layout.bird.left}px`;
+      birdStage.style.top = `${layout.bird.top}px`;
+      birdStage.style.right = 'auto';
+      birdStage.style.bottom = 'auto';
+      birdStage.style.transform = 'none';
+      const rect = parrot.getBoundingClientRect();
+      moveBirdTo(rect.left, rect.top);
     }
   }
 }
@@ -405,13 +458,15 @@ function clampFloatingLayout() {
     moveSpeechTo(rect.left, rect.top);
   }
 
+  fitSpeechToViewport();
+
   if (guidePanel && !guidePanel.hidden) {
     const rect = guidePanel.getBoundingClientRect();
     moveGuideTo(rect.left, rect.top);
   }
 
   if (birdStage) {
-    const rect = birdStage.getBoundingClientRect();
+    const rect = parrot.getBoundingClientRect();
     moveBirdTo(rect.left, rect.top);
   }
 }
@@ -480,8 +535,9 @@ function setupSpeechResizeHandle(handle, edge) {
     const dy = event.clientY - speechResize.startY;
     if (speechResize.edge === 'left') {
       const right = speechResize.left + speechResize.width;
-      const minLeft = Math.max(8, right - (window.innerWidth - 16));
-      const maxLeft = right - 190;
+      const minWidth = speechMinWidth();
+      const minLeft = Math.max(speechMargin, right - (window.innerWidth - speechMargin * 2));
+      const maxLeft = Math.max(minLeft, right - minWidth);
       const nextLeft = clamp(speechResize.left + dx, minLeft, maxLeft);
       resizeSpeechTo(
         right - nextLeft,
@@ -552,7 +608,7 @@ windowResizeHandles.forEach(setupWindowResizeHandle);
 
 if (speech) {
   speech.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || event.target.closest('.speech-resize-handle')) return;
+    if (event.button !== 0 || event.target.closest('.speech-resize-handle, .speech-hide-button')) return;
     windowDrag = {
       pointerId: event.pointerId,
       lastScreenX: event.screenX,
@@ -581,6 +637,18 @@ if (speech) {
 
   speech.addEventListener('pointerup', stopWindowDrag);
   speech.addEventListener('pointercancel', stopWindowDrag);
+}
+
+if (speechHideButton) {
+  speechHideButton.addEventListener('pointerdown', (event) => {
+    event.stopPropagation();
+  });
+
+  speechHideButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSpeechVisible(false);
+  });
 }
 
 const guideHeader = guidePanel?.querySelector('.guide-header');
@@ -619,7 +687,7 @@ if (guideHeader) {
   guideHeader.addEventListener('pointercancel', stopGuideDrag);
 }
 
-const birdDragSurface = birdStage || parrot;
+const birdDragSurface = parrot || birdStage;
 
 birdDragSurface.addEventListener('contextmenu', (event) => {
   event.preventDefault();
@@ -630,11 +698,14 @@ birdDragSurface.addEventListener('contextmenu', (event) => {
 
 birdDragSurface.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
-  const rect = birdStage.getBoundingClientRect();
+  const rect = parrot.getBoundingClientRect();
   birdDrag = {
     pointerId: event.pointerId,
+    mode: event.metaKey ? 'window' : 'bird',
     startX: event.clientX,
     startY: event.clientY,
+    lastScreenX: event.screenX,
+    lastScreenY: event.screenY,
     left: rect.left,
     top: rect.top,
     totalDistance: 0,
@@ -652,6 +723,15 @@ birdDragSurface.addEventListener('pointermove', (event) => {
 
   if (birdDrag.totalDistance <= 4) return;
   birdDrag.moved = true;
+  if (birdDrag.mode === 'window') {
+    const moveX = event.screenX - birdDrag.lastScreenX;
+    const moveY = event.screenY - birdDrag.lastScreenY;
+    birdDrag.lastScreenX = event.screenX;
+    birdDrag.lastScreenY = event.screenY;
+    window.buddy.windowAction({ type: 'move-by', dx: moveX, dy: moveY });
+    return;
+  }
+
   moveBirdTo(birdDrag.left + dx, birdDrag.top + dy);
 });
 
@@ -681,6 +761,21 @@ birdDragSurface.addEventListener('click', (event) => {
     birdClickCount = 0;
     clearTimeout(birdClickTimer);
     setWindowEditMode(!windowEditMode);
+    return;
+  }
+
+  if (speech?.hidden) {
+    birdClickCount = 0;
+    clearTimeout(birdClickTimer);
+    setSpeechVisible(true);
+    playPokeAnimation();
+    window.buddy.windowAction({
+      type: 'poke',
+      pointer: {
+        x: event.screenX,
+        y: event.screenY
+      }
+    });
     return;
   }
 

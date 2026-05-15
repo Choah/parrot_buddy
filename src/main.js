@@ -11,6 +11,11 @@ const runningProcesses = new Map();
 let mainWindow = null;
 let apiServer = null;
 let tray = null;
+let trayIdleImage = null;
+let trayActiveImages = [];
+let trayAnimationTimer = null;
+let trayAnimationIndex = 0;
+let trayAnimationActive = false;
 let agentMonitor = null;
 let wanderTimer = null;
 let pokeTimer = null;
@@ -18,7 +23,7 @@ let wanderVelocity = { x: 0.45, y: 0.28 };
 const assetPath = (...parts) => path.join(__dirname, '..', 'assets', ...parts);
 const COMPACT_WINDOW_SIZE = { width: 430, height: 292 };
 const GUIDE_WINDOW_SIZE = { width: 430, height: 520 };
-const MIN_WINDOW_SIZE = { width: 220, height: 160 };
+const MIN_WINDOW_SIZE = { width: 128, height: 112 };
 let compactWindowSize = { ...COMPACT_WINDOW_SIZE };
 let guideWindowOpen = false;
 
@@ -128,15 +133,68 @@ function updateTrayMenu() {
   ]));
 }
 
+function loadTrayImage(filename, fallbackFilename = 'app-icon.png') {
+  const image = nativeImage.createFromPath(assetPath(filename));
+  return image.isEmpty() ? nativeImage.createFromPath(assetPath(fallbackFilename)) : image;
+}
+
+function hasActiveAgent(snapshot = store.snapshot()) {
+  return snapshot.tasks.some((task) => (
+    task.source === 'agent' && (task.status === 'running' || task.status === 'hitl')
+  ));
+}
+
+function stopTrayAnimation() {
+  if (trayAnimationTimer) {
+    clearInterval(trayAnimationTimer);
+    trayAnimationTimer = null;
+  }
+  trayAnimationIndex = 0;
+  trayAnimationActive = false;
+  if (tray && trayIdleImage) tray.setImage(trayIdleImage);
+}
+
+function startTrayAnimation() {
+  if (!tray || trayActiveImages.length === 0) return;
+  if (trayAnimationActive) return;
+
+  trayAnimationActive = true;
+  trayAnimationIndex = 0;
+  tray.setImage(trayActiveImages[trayAnimationIndex]);
+  trayAnimationTimer = setInterval(() => {
+    if (!tray) return;
+    trayAnimationIndex = (trayAnimationIndex + 1) % trayActiveImages.length;
+    tray.setImage(trayActiveImages[trayAnimationIndex]);
+  }, 220);
+  trayAnimationTimer.unref?.();
+}
+
+function updateTrayActivity(snapshot = store.snapshot()) {
+  if (!tray) return;
+  if (hasActiveAgent(snapshot)) {
+    startTrayAnimation();
+    return;
+  }
+  stopTrayAnimation();
+}
+
 function createTray() {
-  const image = nativeImage.createFromPath(assetPath('tray-icon.png'));
-  tray = new Tray(image.isEmpty() ? assetPath('app-icon.png') : image);
+  trayIdleImage = loadTrayImage('tray-icon.png');
+  trayActiveImages = [
+    loadTrayImage('tray-icon-active-left.png', 'tray-icon.png'),
+    trayIdleImage,
+    loadTrayImage('tray-icon-active-right.png', 'tray-icon.png'),
+    trayIdleImage
+  ];
+
+  tray = new Tray(trayIdleImage);
   tray.setToolTip('Parrot Buddy');
   tray.on('click', () => {
     if (mainWindow?.isVisible()) hideWindow();
     else showWindow();
   });
   updateTrayMenu();
+  updateTrayActivity();
 }
 
 function startWander() {
@@ -335,6 +393,7 @@ async function startApiServer() {
 
 app.whenReady().then(async () => {
   store.on('change', broadcastSnapshot);
+  store.on('change', updateTrayActivity);
   await startApiServer();
   agentMonitor = new AgentMonitor({
     store,
@@ -356,6 +415,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', async () => {
   app.isQuitting = true;
+  stopTrayAnimation();
   stopWander();
   agentMonitor?.stop();
 

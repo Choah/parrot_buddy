@@ -18,6 +18,7 @@
 
       <section class="speech" aria-label="Current status">
         <button class="speech-resize-handle left" id="speechResizeLeftHandle" type="button" aria-label="Resize status box from left"></button>
+        <button class="speech-hide-button" id="speechHideButton" type="button" aria-label="Hide status box">×</button>
         <strong id="summaryPill">Watching agents</strong>
         <ul class="agent-bullets" id="statusHint" aria-label="Tracked agents"></ul>
         <button class="speech-resize-handle right" id="speechResizeHandle" type="button" aria-label="Resize status box from right"></button>
@@ -110,12 +111,12 @@
 
         <div class="guide-block">
           <h2>앵무새 이동</h2>
-          <p>앵무새 주변을 잡고 드래그하면 앱 창 전체를 원하는 위치로 옮길 수 있습니다.</p>
+          <p>앵무새를 잡고 드래그하면 창 안에서 앵무새만 옮길 수 있습니다. Command를 누른 채 드래그하면 앱 창 전체를 옮깁니다.</p>
         </div>
 
         <div class="guide-block">
           <h2>실제 창 크기</h2>
-          <p>앵무새를 우클릭하거나 Option을 누른 채 앵무새를 클릭하면 외곽선이 나타납니다. 모서리를 드래그해서 투명하게 막히는 영역을 줄일 수 있습니다.</p>
+          <p>앵무새를 우클릭하거나 Option을 누른 채 앵무새를 클릭하면 외곽선이 나타납니다. 모서리를 드래그해서 투명하게 막히는 영역을 줄일 수 있고, 상태 박스도 작은 창 크기에 맞춰 줄어듭니다.</p>
         </div>
 
         <div class="guide-block">
@@ -134,8 +135,13 @@
         </div>
 
         <div class="guide-block">
+          <h2>상태 박스 숨기기</h2>
+          <p>상태 박스 오른쪽 위 × 버튼으로 숨길 수 있습니다. 숨긴 뒤에는 앵무새를 한 번 클릭하면 다시 나타납니다.</p>
+        </div>
+
+        <div class="guide-block">
           <h2>메뉴바</h2>
-          <p>상단 메뉴바의 작은 앵무새 아이콘에서 숨기기, 다시 보이기, 모니터 재시작, 종료를 할 수 있습니다.</p>
+          <p>상단 메뉴바의 작은 앵무새 아이콘에서 숨기기, 다시 보이기, 모니터 재시작, 종료를 할 수 있습니다. 작업 중에는 메뉴바 아이콘이 좌우로 흔들립니다.</p>
         </div>
 
         <div class="task-list" id="taskList"></div>
