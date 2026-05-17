@@ -26,7 +26,7 @@ let wanderTimer = null;
 let pokeTimer = null;
 let wanderVelocity = { x: 0.45, y: 0.28 };
 const assetPath = (...parts) => path.join(__dirname, '..', 'assets', ...parts);
-const COMPACT_WINDOW_BOUNDS = { x: 747, y: 226, width: 361, height: 126 };
+const COMPACT_WINDOW_BOUNDS = { x: 343, y: 333, width: 376, height: 111 };
 const COMPACT_WINDOW_SIZE = {
   width: COMPACT_WINDOW_BOUNDS.width,
   height: COMPACT_WINDOW_BOUNDS.height

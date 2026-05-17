@@ -98,11 +98,11 @@ body.window-editing .window-frame-editor {
 
 .window-frame-label {
   position: absolute;
-  top: -1px;
+  bottom: -1px;
   left: 12px;
   padding: 2px 7px;
   border: 1px solid rgba(90, 61, 17, 0.14);
-  border-radius: 0 0 7px 7px;
+  border-radius: 7px 7px 0 0;
   color: #5a3d11;
   background: rgba(255, 249, 229, 0.92);
   box-shadow: 0 5px 14px rgba(74, 48, 14, 0.12);
@@ -113,11 +113,11 @@ body.window-editing .window-frame-editor {
 
 .window-guide-button {
   position: absolute;
-  top: -1px;
+  bottom: -1px;
   left: 90px;
   padding: 2px 7px;
   border: 1px solid rgba(90, 61, 17, 0.14);
-  border-radius: 0 0 7px 7px;
+  border-radius: 7px 7px 0 0;
   color: #5a3d11;
   background: rgba(255, 249, 229, 0.92);
   box-shadow: 0 5px 14px rgba(74, 48, 14, 0.12);
@@ -185,12 +185,12 @@ body.window-editing .window-resize-handle {
 .speech {
   -webkit-app-region: no-drag;
   position: absolute;
-  top: 13px;
-  left: 10px;
+  top: 7px;
+  left: 93px;
   right: auto;
   z-index: 24;
-  width: 254px;
-  height: 88px;
+  width: 275px;
+  height: 95px;
   min-width: min(96px, calc(100vw - 16px));
   min-height: min(40px, calc(100vh - 16px));
   max-width: calc(100vw - 16px);
@@ -342,11 +342,11 @@ body.window-editing .window-resize-handle {
 
 .bird-stage {
   -webkit-app-region: no-drag;
-  --bird-width: 92px;
-  --bird-height: 96px;
+  --bird-width: 72px;
+  --bird-height: 75px;
   position: absolute;
-  top: -7px;
-  left: 233px;
+  top: 4px;
+  left: 0;
   z-index: 16;
   width: calc(var(--bird-width) + 20px);
   height: calc(var(--bird-height) + 20px);
@@ -658,9 +658,10 @@ body.window-editing .bird-resize-handle {
 .guide-panel {
   -webkit-app-region: no-drag;
   position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 14px;
+  left: 8px;
+  right: 8px;
+  top: 55px;
+  bottom: auto;
   z-index: 30;
   display: grid;
   gap: 10px;
@@ -682,8 +683,9 @@ body.window-editing .bird-resize-handle {
 .assistant-panel {
   -webkit-app-region: no-drag;
   position: absolute;
-  left: 14px;
-  bottom: 14px;
+  left: 20px;
+  top: 20px;
+  bottom: auto;
   z-index: 34;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
