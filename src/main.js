@@ -51,16 +51,8 @@ function broadcastAgentAlert(kind, task) {
   });
 }
 
-function hasOtherActiveAgentTask(taskId) {
-  return store.snapshot().tasks.some((task) => (
-    task.id !== taskId
-    && task.source === 'agent'
-    && (task.status === 'running' || task.status === 'hitl')
-  ));
-}
-
 function notifyAgentFinished(task) {
-  if (task?.silent || hasOtherActiveAgentTask(task?.id)) return;
+  if (task?.silent) return;
   playCompletionSound(task?.status === 'stopped' ? 'stopped' : task?.status || 'success');
   broadcastAgentAlert('finished', task);
 }

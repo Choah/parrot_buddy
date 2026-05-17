@@ -34,6 +34,21 @@ test('parses Codex turn lifecycle events without reading message text', () => {
   assert.equal(completed.turnId, 'turn-1');
 });
 
+test('parses Codex subagent session metadata', () => {
+  const event = parseCodexEventLine(JSON.stringify({
+    timestamp: '2026-05-17T10:46:48.491Z',
+    type: 'session_meta',
+    payload: {
+      cwd: '/tmp/book',
+      agent_nickname: 'Bernoulli'
+    }
+  }));
+
+  assert.equal(event.type, 'session_meta');
+  assert.equal(event.cwd, '/tmp/book');
+  assert.equal(event.agentNickname, 'Bernoulli');
+});
+
 test('parses Claude Code transcript activity generically', () => {
   const event = parseClaudeLine(JSON.stringify({
     type: 'tool_use',
@@ -263,7 +278,7 @@ test('limits same-folder active Codex turns to live terminal count', () => {
   ]);
 });
 
-test('does not alert when one subagent finishes while another agent task is active', () => {
+test('alerts when a top-level Codex turn finishes while another independent agent task is active', () => {
   const store = new TaskStore();
   const finished = [];
   const monitor = new AgentMonitor({
@@ -280,30 +295,69 @@ test('does not alert when one subagent finishes while another agent task is acti
     status: 'running'
   });
   store.upsertTask({
-    id: 'codex-turn-subagent',
-    label: 'Codex: book #subagent',
+    id: 'codex-turn-main',
+    label: 'Codex: other #main',
     source: 'agent',
-    command: '/tmp/book · working',
+    command: '/tmp/other · working',
     status: 'running'
   });
 
-  monitor.noteTransition('codex-turn-subagent', 'running', 'success', {
-    id: 'codex-turn-subagent',
-    label: 'Codex: book #subagent',
-    source: 'agent',
-    status: 'success'
-  });
-  assert.equal(finished.length, 0);
-
-  store.removeTask('codex-turn-subagent');
-  monitor.noteTransition('codex-turn-parent', 'running', 'success', {
-    id: 'codex-turn-parent',
-    label: 'Codex: book #parent',
+  monitor.noteTransition('codex-turn-main', 'running', 'success', {
+    id: 'codex-turn-main',
+    label: 'Codex: other #main',
     source: 'agent',
     status: 'success'
   });
   assert.equal(finished.length, 1);
-  assert.equal(finished[0].id, 'codex-turn-parent');
+  assert.equal(finished[0].id, 'codex-turn-main');
+});
+
+test('keeps spawned Codex subagent completions silent based on session metadata', () => {
+  const store = new TaskStore();
+  const finished = [];
+  const monitor = new AgentMonitor({
+    store,
+    pollMs: 999999,
+    onAgentFinished: (task) => finished.push(task)
+  });
+  const filePath = '/tmp/subagent.jsonl';
+  const mtime = Date.now();
+
+  monitor.applyCodexEvent({
+    type: 'session_meta',
+    cwd: '/tmp/book',
+    agentNickname: 'Bernoulli',
+    filePath,
+    fileMtimeMs: mtime
+  });
+  monitor.applyCodexEvent({
+    type: 'task_started',
+    turnId: 'turn-subagent',
+    startedAt: new Date(mtime - 1000).toISOString(),
+    filePath,
+    fileMtimeMs: mtime
+  });
+  monitor.applyCodexEvent({
+    type: 'turn_context',
+    turnId: 'turn-subagent',
+    cwd: '/tmp/book',
+    filePath,
+    fileMtimeMs: mtime
+  });
+  monitor.updateCodexTask([]);
+
+  monitor.applyCodexEvent({
+    type: 'task_complete',
+    turnId: 'turn-subagent',
+    status: 'success',
+    finishedAt: new Date(mtime).toISOString(),
+    filePath,
+    fileMtimeMs: mtime
+  });
+  monitor.updateCodexTask([]);
+
+  assert.equal(monitor.codexCompletedTurns.get('turn-subagent').silent, true);
+  assert.equal(finished.length, 0);
 });
 
 test('keeps synthetic Codex cleanup silent', () => {

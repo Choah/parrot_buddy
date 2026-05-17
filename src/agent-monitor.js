@@ -149,6 +149,14 @@ function parseCodexEventLine(line) {
   }
 
   const payload = entry.payload || {};
+  if (entry.type === 'session_meta') {
+    return {
+      type: 'session_meta',
+      cwd: payload.cwd || null,
+      agentNickname: payload.agent_nickname || null
+    };
+  }
+
   if (entry.type === 'event_msg' && payload.type === 'task_started' && payload.turn_id) {
     return {
       type: 'task_started',
@@ -490,6 +498,7 @@ class AgentMonitor {
     this.codexActiveTurns = new Map();
     this.codexCompletedTurns = new Map();
     this.codexContexts = new Map();
+    this.codexFileMeta = new Map();
     this.fileLastTurnIds = new Map();
     this.pendingApprovals = new Map();
     this.codexProcessTaskIds = new Set();
@@ -610,11 +619,21 @@ class AgentMonitor {
   }
 
   applyCodexEvent(event) {
+    if (event.type === 'session_meta') {
+      this.codexFileMeta.set(event.filePath, {
+        cwd: event.cwd,
+        agentNickname: event.agentNickname || null
+      });
+      return;
+    }
+
     if (event.type === 'turn_context') {
+      const meta = this.codexFileMeta.get(event.filePath) || {};
       this.fileLastTurnIds.set(event.filePath, event.turnId);
       this.codexContexts.set(event.turnId, {
         cwd: event.cwd,
         model: event.model,
+        agentNickname: meta.agentNickname || null,
         filePath: event.filePath,
         fileMtimeMs: event.fileMtimeMs
       });
@@ -622,17 +641,23 @@ class AgentMonitor {
     }
 
     if (event.type === 'task_started') {
+      const meta = this.codexFileMeta.get(event.filePath) || {};
       this.fileLastTurnIds.set(event.filePath, event.turnId);
       this.codexActiveTurns.set(event.turnId, {
         startedAt: event.startedAt,
         filePath: event.filePath,
         fileMtimeMs: event.fileMtimeMs,
-        lastActivityAt: event.startedAt
+        lastActivityAt: event.startedAt,
+        agentNickname: meta.agentNickname || null
       });
       return;
     }
 
     if (event.type === 'task_complete' || event.type === 'turn_aborted') {
+      const active = this.codexActiveTurns.get(event.turnId) || {};
+      const context = this.codexContexts.get(event.turnId) || {};
+      const meta = this.codexFileMeta.get(event.filePath) || {};
+      const agentNickname = active.agentNickname || context.agentNickname || meta.agentNickname || null;
       this.fileLastTurnIds.set(event.filePath, event.turnId);
       this.codexActiveTurns.delete(event.turnId);
       this.codexCompletedTurns.set(event.turnId, {
@@ -641,7 +666,9 @@ class AgentMonitor {
         status: event.status,
         message: event.message,
         filePath: event.filePath,
-        fileMtimeMs: event.fileMtimeMs
+        fileMtimeMs: event.fileMtimeMs,
+        agentNickname,
+        silent: Boolean(agentNickname)
       });
       this.trimCompletedCodexTurns();
       return;
@@ -1118,14 +1145,6 @@ class AgentMonitor {
     this.trimCompletedCodexTurns();
   }
 
-  hasOtherActiveAgentTask(currentId) {
-    return this.store.snapshot().tasks.some((task) => (
-      task.id !== currentId
-      && task.source === 'agent'
-      && (task.status === 'running' || task.status === 'hitl')
-    ));
-  }
-
   noteTransition(id, previous, next, task) {
     if (previous === next) return;
     this.lastStatuses.set(id, next);
@@ -1134,7 +1153,7 @@ class AgentMonitor {
       return;
     }
     if ((previous === 'running' || previous === 'hitl') && next !== 'running' && next !== 'hitl') {
-      if (task?.silent || this.hasOtherActiveAgentTask(id)) return;
+      if (task?.silent) return;
       this.onAgentFinished?.(task);
     }
   }

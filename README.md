@@ -119,6 +119,7 @@ Codex 또는 Claude Code가 작업 중이거나 확인을 기다리는 동안에
 
 - **사용자 확인이 필요한 `confirm` 상태**가 되면 소리와 앵무새 또잉 알림이 납니다.
 - **Codex/Claude Code의 활성 agent 작업이 전부 끝난 순간**에도 한 번 알립니다.
+- 다른 독립 Codex/Claude Code 작업이 켜져 있어도, 해당 top-level 작업이 끝나면 알립니다.
 - 개별 서브에이전트가 먼저 끝나는 경우에는 소리나 또잉 없이 상태만 조용히 갱신합니다.
 
 ### 7. 상태 의미
@@ -323,6 +324,7 @@ Notification rules:
 
 - It chirps and bounces when the app enters a `confirm` state that needs user attention.
 - It also alerts once when all active Codex/Claude Code agent work has finished.
+- If another independent Codex/Claude Code task is still open, a finished top-level task can still alert.
 - Individual subagent completions update the status quietly without a chirp or bounce.
 
 ### 7. Status Meanings
