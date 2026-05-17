@@ -370,7 +370,7 @@ body.window-editing .window-resize-handle {
   border-radius: 14px 14px 14px 5px;
   color: #4f3107;
   background: rgba(255, 252, 238, 0.98);
-  box-shadow: 0 12px 26px rgba(74, 48, 14, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  box-shadow: none;
   font-size: 10px;
   font-weight: 850;
   line-height: 1.35;
