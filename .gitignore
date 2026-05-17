@@ -4,3 +4,18 @@ dist/
 .DS_Store
 npm-debug.log*
 *.log
+
+# Local configuration and personal assistant data
+.env
+.env.*
+!.env.example
+.parrot-buddy/
+parrot-buddy-data/
+assistant-data/
+memory.md
+history/
+sessions/
+thoughts/
+reminders.json
+settings.json
+inbox.md

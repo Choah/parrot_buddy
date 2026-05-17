@@ -1,0 +1,23 @@
+# Tasks
+
+- [ ] Confirm unresolved PRD questions with the user.
+- [x] Add assistant storage root creation and path guard.
+- [x] Add reminder store and tests.
+- [x] Add assistant session log writer.
+- [x] Add Codex availability check.
+- [x] Add Codex adapter for structured JSON output.
+- [x] Add Codex output schema validation.
+- [x] Add assistant orchestrator.
+- [x] Add long-press chat panel trigger.
+- [x] Add assistant chat UI.
+- [x] Add due reminder scheduler.
+- [x] Add reminder done action.
+- [ ] Add reminder snooze/edit actions.
+- [x] Add Joy persona and small-talk no-save behavior.
+- [x] Add local `AGENTS.md` and `CLAUDE.md` assistant instructions.
+- [x] Load recent history before older history for recall context.
+- [x] Fix assistant chat scrolling.
+- [x] Add guide and README instructions.
+- [x] Add tests for storage, reminders, and malformed Codex output.
+- [x] Run existing `npm test`.
+- [ ] Manual-test long-press, drag, Option-click, guide, and reminders together.

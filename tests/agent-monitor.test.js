@@ -4,7 +4,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { TaskStore } = require('../src/task-store');
-const { AgentMonitor, messageLooksHitl, parseClaudeLine, parseCodexEventLine } = require('../src/agent-monitor');
+const {
+  AgentMonitor,
+  completedMessageLooksHitl,
+  messageLooksHitl,
+  parseClaudeLine,
+  parseCodexEventLine
+} = require('../src/agent-monitor');
 
 test('parses Codex turn lifecycle events without reading message text', () => {
   const started = parseCodexEventLine(JSON.stringify({
@@ -142,6 +148,33 @@ test('keeps action-specific Korean confirmation questions as HITL', () => {
   assert.equal(messageLooksHitl('충돌 파일을 덮어써도 될까요?'), true);
   assert.equal(messageLooksHitl('이 명령은 승인 필요 상태입니다.'), true);
   assert.equal(messageLooksHitl('무엇을 도와드리면 될까요?'), false);
+});
+
+test('does not treat completed summaries mentioning confirmation as HITL', () => {
+  assert.equal(completedMessageLooksHitl('구현 완료했습니다. 확인 필요 항목은 없습니다.'), false);
+  assert.equal(completedMessageLooksHitl('테스트 통과했고, 실제 앱에서 확인하면 됩니다.'), false);
+});
+
+test('keeps direct completed confirmation questions as HITL', () => {
+  assert.equal(completedMessageLooksHitl('커밋할까요?'), true);
+  assert.equal(completedMessageLooksHitl('계속 진행할까요?'), true);
+});
+
+test('keeps Codex completed summaries with confirmation wording as success', () => {
+  const event = parseCodexEventLine(JSON.stringify({
+    timestamp: '2026-05-15T08:54:00.000Z',
+    type: 'event_msg',
+    payload: {
+      type: 'task_complete',
+      turn_id: 'turn-done',
+      completed_at: 1778835240,
+      last_agent_message: '구현 완료했습니다. 확인 필요 항목은 없습니다.'
+    }
+  }));
+
+  assert.equal(event.type, 'task_complete');
+  assert.equal(event.status, 'success');
+  assert.equal(event.message, null);
 });
 
 test('parses Codex approval requests as HITL events', () => {

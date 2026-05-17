@@ -5,6 +5,8 @@ const { TaskStore } = require('./task-store');
 const { createApiServer, DEFAULT_PORT } = require('./api-server');
 const { playAttentionSound, playCompletionSound } = require('./sound');
 const { AgentMonitor } = require('./agent-monitor');
+const { AssistantOrchestrator } = require('./assistant/assistant-orchestrator');
+const { STATUS_SOURCES } = require('./task-store');
 
 const store = new TaskStore();
 const runningProcesses = new Map();
@@ -17,6 +19,9 @@ let trayAnimationTimer = null;
 let trayAnimationIndex = 0;
 let trayAnimationActive = false;
 let agentMonitor = null;
+let assistantOrchestrator = null;
+let reminderTimer = null;
+let thoughtTimer = null;
 let wanderTimer = null;
 let pokeTimer = null;
 let wanderVelocity = { x: 0.45, y: 0.28 };
@@ -60,6 +65,14 @@ function notifyAgentFinished(task) {
 function notifyAgentAttention(task) {
   playAttentionSound(task?.status || 'hitl');
   broadcastAgentAlert('attention', task);
+}
+
+function shouldNotifyAssistantFinished(result = {}) {
+  if (!result.ok || result.needsConfirmation) return false;
+  const changedFiles = Array.isArray(result.changedFiles) ? result.changedFiles : [];
+  const hasPersistentChange = changedFiles.some((file) => !String(file).startsWith('sessions/'));
+  const hasReminderChange = (result.reminders || []).length > 0 || (result.updatedReminders || []).length > 0;
+  return hasPersistentChange || hasReminderChange;
 }
 
 function createWindow() {
@@ -133,6 +146,13 @@ function agentName(task) {
   const label = String(task?.label || '');
   const command = String(task?.command || '');
 
+  if (task?.source === 'assistant') {
+    if (/^Parrot reminder:/i.test(label)) {
+      return label.replace(/^Parrot reminder:\s*/i, '조이 · ');
+    }
+    return '조이';
+  }
+
   const codexTurn = label.match(/^Codex:\s*([^#]+?)(?:\s*#(.+))?$/);
   if (codexTurn) {
     const suffix = codexTurn[2] ? ` #${codexTurn[2].trim()}` : '';
@@ -157,14 +177,16 @@ function agentName(task) {
 
 function visibleTrayTasks(snapshot = store.snapshot()) {
   return snapshot.tasks
-    .filter((task) => task.source === 'agent')
+    .filter((task) => STATUS_SOURCES.has(task.source))
     .filter((task) => task.status !== 'success' && task.status !== 'stopped');
 }
 
 function traySummaryLabel(snapshot = store.snapshot()) {
   const summary = snapshot.summary || {};
-  if (summary.agentHitlCount > 0) return `Status: confirm needed (${summary.agentHitlCount})`;
-  if (summary.agentRunningCount > 0) return `Status: working (${summary.agentRunningCount})`;
+  const hitlCount = (summary.agentHitlCount || 0) + (summary.assistantHitlCount || 0);
+  const runningCount = (summary.agentRunningCount || 0) + (summary.assistantRunningCount || 0);
+  if (hitlCount > 0) return `Status: confirm needed (${hitlCount})`;
+  if (runningCount > 0) return `Status: working (${runningCount})`;
   if (summary.agentReadyCount > 0) return `Status: ready (${summary.agentReadyCount})`;
   return 'Status: no active agents';
 }
@@ -228,7 +250,7 @@ function loadTrayImage(filename, fallbackFilename = 'app-icon.png') {
 
 function hasActiveAgent(snapshot = store.snapshot()) {
   return snapshot.tasks.some((task) => (
-    task.source === 'agent' && (task.status === 'running' || task.status === 'hitl')
+    STATUS_SOURCES.has(task.source) && (task.status === 'running' || task.status === 'hitl')
   ));
 }
 
@@ -517,6 +539,62 @@ async function startApiServer() {
   }
 }
 
+function reminderTask(reminder) {
+  return {
+    id: `assistant-reminder-${reminder.id}`,
+    label: `Parrot reminder: ${reminder.title}`,
+    source: 'assistant',
+    command: `주인님, 오늘 ${reminder.title} 있는 거 아시죠? 까먹으면 곤란하다구요. · ${reminder.dueAt}`,
+    status: 'hitl',
+    startedAt: reminder.createdAt,
+    finishedAt: null
+  };
+}
+
+function checkDueReminders() {
+  if (!assistantOrchestrator) return;
+  const dueReminders = assistantOrchestrator.collectDueReminders(new Date());
+  for (const reminder of dueReminders) {
+    const task = store.upsertTask(reminderTask(reminder));
+    notifyAgentAttention(task);
+  }
+}
+
+function startReminderScheduler() {
+  if (reminderTimer) return;
+  checkDueReminders();
+  reminderTimer = setInterval(checkDueReminders, 60 * 1000);
+  reminderTimer.unref?.();
+}
+
+function stopReminderScheduler() {
+  if (!reminderTimer) return;
+  clearInterval(reminderTimer);
+  reminderTimer = null;
+}
+
+function refreshDailyThoughts() {
+  if (!assistantOrchestrator) return;
+  try {
+    assistantOrchestrator.refreshThoughts(new Date());
+  } catch (error) {
+    console.error('Could not refresh Joy thoughts:', error.message);
+  }
+}
+
+function startThoughtScheduler() {
+  if (thoughtTimer) return;
+  refreshDailyThoughts();
+  thoughtTimer = setInterval(refreshDailyThoughts, 30 * 60 * 1000);
+  thoughtTimer.unref?.();
+}
+
+function stopThoughtScheduler() {
+  if (!thoughtTimer) return;
+  clearInterval(thoughtTimer);
+  thoughtTimer = null;
+}
+
 app.whenReady().then(async () => {
   store.on('change', broadcastSnapshot);
   store.on('change', updateTrayMenu);
@@ -532,6 +610,13 @@ app.whenReady().then(async () => {
     }
   });
   agentMonitor.start();
+  assistantOrchestrator = new AssistantOrchestrator();
+  assistantOrchestrator.on('changed', () => {
+    refreshDailyThoughts();
+    broadcastSnapshot();
+  });
+  startReminderScheduler();
+  startThoughtScheduler();
   createTray();
   createWindow();
 
@@ -544,6 +629,8 @@ app.on('before-quit', async () => {
   app.isQuitting = true;
   stopTrayAnimation();
   stopWander();
+  stopReminderScheduler();
+  stopThoughtScheduler();
   agentMonitor?.stop();
 
   for (const child of runningProcesses.values()) {
@@ -560,6 +647,57 @@ app.on('window-all-closed', () => {
 });
 
 ipcMain.handle('tasks:snapshot', () => store.snapshot());
+
+ipcMain.handle('assistant:snapshot', () => assistantOrchestrator?.snapshot() || { ok: false });
+
+ipcMain.handle('assistant:thought', () => {
+  if (!assistantOrchestrator) return { ok: false, error: 'Assistant is not ready' };
+  return assistantOrchestrator.randomThought();
+});
+
+ipcMain.handle('assistant:message', async (_event, payload = {}) => {
+  if (!assistantOrchestrator) return { ok: false, error: 'Assistant is not ready' };
+  const id = `assistant-chat-${Date.now()}`;
+  const userMessage = String(payload.message || '').trim();
+  const task = store.upsertTask({
+    id,
+    label: 'Parrot assistant',
+    source: 'assistant',
+    command: userMessage.slice(0, 180),
+    status: 'running'
+  });
+
+  const result = await assistantOrchestrator.handleMessage(userMessage);
+  if (result.ok && result.needsConfirmation) {
+    const hitlTask = store.upsertTask({
+      ...task,
+      status: 'hitl',
+      command: result.clarifyingQuestion || result.reply
+    });
+    notifyAgentAttention(hitlTask);
+    return result;
+  }
+
+  const finished = store.finishTask(id, {
+    status: result.ok ? 'success' : 'failed',
+    source: 'assistant',
+    label: 'Parrot assistant',
+    command: result.reply || result.error || userMessage,
+    exitCode: result.ok ? 0 : 1
+  });
+  if (result.ok ? shouldNotifyAssistantFinished(result) : true) {
+    notifyAgentFinished(finished);
+  }
+  return result;
+});
+
+ipcMain.handle('assistant:reminder-done', (_event, id) => {
+  if (!assistantOrchestrator) return { ok: false, error: 'Assistant is not ready' };
+  const reminder = assistantOrchestrator.markReminderDone(id);
+  if (!reminder) return { ok: false, error: 'Reminder not found' };
+  store.removeTask(`assistant-reminder-${id}`);
+  return { ok: true, reminder, snapshot: assistantOrchestrator.snapshot() };
+});
 
 ipcMain.handle('tasks:run-command', (_event, payload) => runCommand(payload));
 

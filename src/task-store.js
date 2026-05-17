@@ -2,6 +2,7 @@ const { EventEmitter } = require('node:events');
 const crypto = require('node:crypto');
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'stopped']);
+const STATUS_SOURCES = new Set(['agent', 'assistant']);
 
 function nowIso() {
   return new Date().toISOString();
@@ -141,12 +142,18 @@ class TaskStore extends EventEmitter {
   getSummary() {
     const tasks = this.getTasks();
     const agentTasks = tasks.filter((task) => task.source === 'agent');
+    const assistantTasks = tasks.filter((task) => task.source === 'assistant');
+    const statusTasks = tasks.filter((task) => STATUS_SOURCES.has(task.source));
     return {
       runningCount: tasks.filter((task) => task.status === 'running').length,
       agentRunningCount: agentTasks.filter((task) => task.status === 'running').length,
       agentHitlCount: agentTasks.filter((task) => task.status === 'hitl').length,
       agentReadyCount: agentTasks.filter((task) => task.status === 'waiting' || task.status === 'success').length,
       agentStoppedCount: agentTasks.filter((task) => task.status === 'stopped').length,
+      assistantRunningCount: assistantTasks.filter((task) => task.status === 'running').length,
+      assistantHitlCount: assistantTasks.filter((task) => task.status === 'hitl').length,
+      statusRunningCount: statusTasks.filter((task) => task.status === 'running').length,
+      statusHitlCount: statusTasks.filter((task) => task.status === 'hitl').length,
       lastFinishedStatus: this.lastFinishedStatus,
       updatedAt: nowIso()
     };
@@ -166,5 +173,6 @@ class TaskStore extends EventEmitter {
 
 module.exports = {
   TaskStore,
-  createId
+  createId,
+  STATUS_SOURCES
 };

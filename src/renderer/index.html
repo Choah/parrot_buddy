@@ -96,6 +96,7 @@
             </g>
           </svg>
         </div>
+        <div class="bird-thinking" id="birdThinking" aria-hidden="true">생각 중<span></span></div>
         <button class="bird-resize-handle" id="birdResizeHandle" type="button" aria-label="Resize parrot"></button>
       </section>
 
@@ -118,12 +119,12 @@
 
         <div class="guide-block">
           <h2>앵무새와 상태 박스</h2>
-          <p>앵무새를 그냥 드래그하면 <strong>창 전체</strong>가 움직입니다. <strong>window size가 보일 때만</strong> 앵무새 오른쪽 아래 작은 손잡이가 나타나고, 그 손잡이를 드래그하면 앵무새 크기를 조절할 수 있습니다. 지금 크기가 기본값입니다. 상태 박스는 드래그해서 원하는 위치로 옮길 수 있고, 아래 핸들로 크기를 조절할 수 있습니다. 이동하거나 조절하면 흰색 window size는 내용에 맞춰 자동으로 줄거나 늘어납니다. <strong>Option + 앵무새 클릭</strong> 또는 <strong>앵무새 우클릭</strong>으로 흰색 window size를 숨기거나 다시 보일 수 있습니다.</p>
+          <p>앵무새를 그냥 드래그하면 <strong>창 전체</strong>가 움직입니다. 앵무새를 한 번 클릭하면 <strong>조이의 짧은 속생각</strong>이 4초간 랜덤으로 표시됩니다. 속생각 후보는 하루 단위로 자동 준비됩니다. <strong>window size가 보일 때만</strong> 앵무새 오른쪽 아래 작은 손잡이가 나타나고, 그 손잡이를 드래그하면 앵무새 크기를 조절할 수 있습니다. 지금 크기가 기본값입니다. 상태 박스는 드래그해서 원하는 위치로 옮길 수 있고, 아래 핸들로 크기를 조절할 수 있습니다. 이동하거나 조절하면 흰색 window size는 내용에 맞춰 자동으로 줄거나 늘어납니다. <strong>Option + 앵무새 클릭</strong> 또는 <strong>앵무새 우클릭</strong>으로 흰색 window size를 숨기거나 다시 보일 수 있습니다.</p>
         </div>
 
         <div class="guide-block">
           <h2>전체 창 이동</h2>
-          <p>전체 창을 옮기고 싶을 때는 앵무새를 드래그하세요. guide가 열려 있을 때는 Guide 제목 줄을 드래그해도 전체 창을 옮길 수 있습니다.</p>
+          <p>전체 창을 옮기고 싶을 때는 앵무새를 드래그하세요. guide가 열려 있을 때는 Guide 제목 줄을 드래그해도 전체 창을 옮길 수 있습니다. 조이 Assistant 창은 헤더나 빈 영역을 드래그하면 전체 창이 아니라 Assistant 창만 따로 움직입니다.</p>
         </div>
 
         <div class="guide-block">
@@ -162,6 +163,24 @@
         </div>
 
         <div class="task-list" id="taskList"></div>
+      </aside>
+
+      <aside class="assistant-panel" id="assistantPanel" aria-label="Parrot Buddy assistant" hidden>
+        <div class="assistant-header">
+          <div>
+            <p class="eyebrow">Assistant</p>
+            <h1>조이</h1>
+          </div>
+          <button class="assistant-close-button" id="assistantCloseButton" type="button" aria-label="Close assistant">×</button>
+        </div>
+        <p class="assistant-intro">중요한 일, 취향, 일정만 기억할게요. 그냥 인사는 안 적어요, 저도 바쁘거든요.</p>
+        <div class="assistant-messages" id="assistantMessages" aria-live="polite">
+        </div>
+        <div class="assistant-reminders" id="assistantReminders" hidden></div>
+        <form class="assistant-form" id="assistantForm">
+          <textarea id="assistantInput" rows="3" placeholder="Enter로 보내기 · Shift+Enter 줄바꿈"></textarea>
+          <button id="assistantSendButton" type="submit">Send</button>
+        </form>
       </aside>
     </main>
 

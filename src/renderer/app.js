@@ -11,11 +11,19 @@ const guideButton = document.getElementById('guideButton');
 const guidePanel = document.getElementById('guidePanel');
 const guideCloseButton = document.getElementById('guideCloseButton');
 const closeButton = document.getElementById('closeButton');
+const assistantPanel = document.getElementById('assistantPanel');
+const assistantCloseButton = document.getElementById('assistantCloseButton');
+const assistantMessages = document.getElementById('assistantMessages');
+const assistantReminders = document.getElementById('assistantReminders');
+const assistantForm = document.getElementById('assistantForm');
+const assistantInput = document.getElementById('assistantInput');
+const assistantSendButton = document.getElementById('assistantSendButton');
 const speech = document.querySelector('.speech');
 const speechHideButton = document.getElementById('speechHideButton');
 const speechResizeHandle = document.getElementById('speechResizeHandle');
 const speechResizeLeftHandle = document.getElementById('speechResizeLeftHandle');
 const birdStage = document.querySelector('.bird-stage');
+const birdThinking = document.getElementById('birdThinking');
 const birdResizeHandle = document.getElementById('birdResizeHandle');
 const windowFrameEditor = document.getElementById('windowFrameEditor');
 const windowResizeHandles = document.querySelectorAll('.window-resize-handle');
@@ -28,10 +36,18 @@ const birdMinWidth = 54;
 const birdMaxWidth = 220;
 const birdAspectHeight = birdDefaultSize.height / birdDefaultSize.width;
 const windowFitMargin = 6;
+const assistantLongPressMs = 620;
+const assistantDragThreshold = 6;
+const assistantThinkingDelayMs = 280;
+const birdThoughtDurationMs = 4000;
 let windowFitTimer = null;
 let fittingWindow = false;
 let windowEditMode = false;
 let windowFrameResize = null;
+let speechHiddenBeforeAssistant = null;
+let assistantThinkingTimer = null;
+let birdThoughtTimer = null;
+let birdBubbleMode = null;
 
 function readLayout() {
   try {
@@ -58,7 +74,7 @@ function formatDuration(task) {
 }
 
 function statusText(snapshot) {
-  const agents = snapshot.tasks.filter((task) => task.source === 'agent');
+  const agents = snapshot.tasks.filter((task) => task.source === 'agent' || task.source === 'assistant');
   const hitl = agents.filter((task) => task.status === 'hitl');
   if (hitl.length > 0) return 'Needs confirmation';
 
@@ -77,6 +93,13 @@ function statusText(snapshot) {
 function agentName(task) {
   const label = String(task.label || '');
   const command = String(task.command || '');
+
+  if (task.source === 'assistant') {
+    if (/^Parrot reminder:/i.test(label)) {
+      return label.replace(/^Parrot reminder:\s*/i, '조이 · ');
+    }
+    return '조이';
+  }
 
   const codexTurn = label.match(/^Codex:\s*([^#]+?)(?:\s*#(.+))?$/);
   if (codexTurn) {
@@ -110,7 +133,7 @@ function agentStatusWord(status) {
 
 function visibleAgentTasks(snapshot) {
   return snapshot.tasks
-    .filter((task) => task.source === 'agent')
+    .filter((task) => task.source === 'agent' || task.source === 'assistant')
     .filter((task) => task.status !== 'success' && task.status !== 'stopped');
 }
 
@@ -141,7 +164,7 @@ function renderStatusItems(snapshot) {
 }
 
 function parrotStatus(snapshot) {
-  const agents = snapshot.tasks.filter((task) => task.source === 'agent');
+  const agents = snapshot.tasks.filter((task) => task.source === 'agent' || task.source === 'assistant');
   if (agents.some((task) => task.status === 'hitl')) return 'hitl';
   if (agents.some((task) => task.status === 'running')) return 'running';
   if (agents.some((task) => task.status === 'waiting' || task.status === 'success')) return 'success';
@@ -190,7 +213,7 @@ function renderTask(task) {
 }
 
 function render(snapshot) {
-  const agentTasks = snapshot.tasks.filter((task) => task.source === 'agent');
+  const agentTasks = snapshot.tasks.filter((task) => task.source === 'agent' || task.source === 'assistant');
   taskCount.textContent = String(agentTasks.length);
   summaryPill.textContent = statusText(snapshot);
   renderStatusItems(snapshot);
@@ -259,6 +282,191 @@ function closeGuide() {
   window.buddy.windowAction({ type: 'guide-mode', open: false });
 }
 
+function appendAssistantMessage(role, text, meta = '') {
+  if (!assistantMessages) return null;
+  const message = document.createElement('div');
+  message.className = `assistant-message ${role}`;
+  message.textContent = text;
+  if (meta) {
+    const metaNode = document.createElement('small');
+    metaNode.className = 'assistant-meta';
+    metaNode.textContent = meta;
+    message.append(metaNode);
+  }
+  assistantMessages.append(message);
+  assistantMessages.scrollTop = assistantMessages.scrollHeight;
+  return message;
+}
+
+function renderBirdBubble(text, mode) {
+  if (!birdStage || !birdThinking) return;
+  birdThinking.replaceChildren(document.createTextNode(text));
+  if (mode === 'thinking') {
+    birdThinking.append(document.createElement('span'));
+  }
+  birdBubbleMode = mode;
+  birdStage.classList.toggle('thinking', mode === 'thinking');
+  birdStage.classList.toggle('thoughtful', mode === 'thought');
+  birdThinking.setAttribute('aria-hidden', 'false');
+  scheduleWindowFit({ persistCompact: false });
+}
+
+function hideBirdBubble(mode = null) {
+  if (!birdStage || !birdThinking) return;
+  if (mode && birdBubbleMode !== mode) return;
+  birdBubbleMode = null;
+  birdStage.classList.remove('thinking', 'thoughtful');
+  birdThinking.setAttribute('aria-hidden', 'true');
+  scheduleWindowFit({ persistCompact: false });
+}
+
+function setAssistantThinking(visible) {
+  if (!birdStage || !birdThinking) return;
+  if (visible) {
+    clearTimeout(birdThoughtTimer);
+    birdThoughtTimer = null;
+    renderBirdBubble('생각 중', 'thinking');
+    return;
+  }
+  hideBirdBubble('thinking');
+}
+
+function clearAssistantThinking() {
+  clearTimeout(assistantThinkingTimer);
+  assistantThinkingTimer = null;
+  setAssistantThinking(false);
+}
+
+function showBirdThought(text) {
+  const thought = String(text || '').trim();
+  if (!thought || birdBubbleMode === 'thinking') return;
+  clearTimeout(birdThoughtTimer);
+  renderBirdBubble(thought, 'thought');
+  birdThoughtTimer = setTimeout(() => {
+    birdThoughtTimer = null;
+    hideBirdBubble('thought');
+  }, birdThoughtDurationMs);
+}
+
+async function showRandomBirdThought() {
+  if (!window.buddy.assistantThought) return;
+  try {
+    const result = await window.buddy.assistantThought();
+    if (result?.ok) showBirdThought(result.thought);
+  } catch {
+    // A click thought is decorative; keep the bird quiet if local context is unavailable.
+  }
+}
+
+function formatReminderTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || '';
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
+}
+
+function renderAssistantReminders(snapshot) {
+  if (!assistantReminders) return;
+  const reminders = [
+    ...(snapshot?.due || []),
+    ...(snapshot?.upcoming || [])
+  ].slice(0, 6);
+
+  assistantReminders.replaceChildren();
+  assistantReminders.hidden = reminders.length === 0;
+  for (const reminder of reminders) {
+    const row = document.createElement('div');
+    row.className = 'assistant-reminder';
+    const label = document.createElement('span');
+    label.textContent = `${formatReminderTime(reminder.snoozedUntil || reminder.dueAt)} · ${reminder.title}`;
+    label.title = label.textContent;
+    const done = document.createElement('button');
+    done.type = 'button';
+    done.textContent = 'done';
+    done.addEventListener('click', async () => {
+      await window.buddy.assistantReminderDone(reminder.id);
+      loadAssistantSnapshot();
+    });
+    row.append(label, done);
+    assistantReminders.append(row);
+  }
+}
+
+async function loadAssistantSnapshot() {
+  if (!window.buddy.assistantSnapshot) return;
+  const snapshot = await window.buddy.assistantSnapshot();
+  renderAssistantReminders(snapshot);
+}
+
+function openAssistantChat() {
+  if (!assistantPanel) return;
+  if (guidePanel && !guidePanel.hidden) closeGuide();
+  if (speech && speechHiddenBeforeAssistant === null) {
+    speechHiddenBeforeAssistant = speech.hidden;
+    if (!speech.hidden) setSpeechVisible(false, false);
+  }
+  assistantPanel.hidden = false;
+  loadAssistantSnapshot();
+  requestAnimationFrame(() => {
+    assistantInput?.focus();
+    fitWindowToContent({ persistCompact: false });
+  });
+}
+
+function closeAssistantChat() {
+  if (!assistantPanel) return;
+  assistantPanel.hidden = true;
+  if (speech && speechHiddenBeforeAssistant === false) {
+    setSpeechVisible(true, false);
+  }
+  speechHiddenBeforeAssistant = null;
+  scheduleWindowFit({ persistCompact: false });
+}
+
+async function sendAssistantMessage() {
+  const message = assistantInput?.value.trim();
+  if (!message) return;
+  assistantInput.value = '';
+  appendAssistantMessage('user', message);
+  let pending = null;
+  clearAssistantThinking();
+  assistantThinkingTimer = setTimeout(() => {
+    setAssistantThinking(true);
+    pending = appendAssistantMessage('assistant', '조이가 생각 중입니다...');
+    scheduleWindowFit({ persistCompact: false });
+  }, assistantThinkingDelayMs);
+  if (assistantSendButton) assistantSendButton.disabled = true;
+  scheduleWindowFit({ persistCompact: false });
+
+  try {
+    const result = await window.buddy.assistantMessage({ message });
+    clearAssistantThinking();
+    pending?.remove();
+    if (result.ok) {
+      const files = Array.isArray(result.changedFiles) && result.changedFiles.length > 0
+        ? `저장: ${result.changedFiles.slice(0, 4).join(', ')}`
+        : '';
+      appendAssistantMessage('assistant', result.reply || '정리했습니다.', files);
+      renderAssistantReminders(result.snapshot);
+      return;
+    }
+
+    appendAssistantMessage('error', result.error || '처리하지 못했습니다.');
+  } catch (error) {
+    clearAssistantThinking();
+    pending?.remove();
+    appendAssistantMessage('error', error.message || '처리하지 못했습니다.');
+  } finally {
+    clearAssistantThinking();
+    if (assistantSendButton) assistantSendButton.disabled = false;
+    scheduleWindowFit({ persistCompact: false });
+  }
+}
+
 function setWindowEditMode(enabled) {
   windowEditMode = Boolean(enabled);
   document.body.classList.toggle('window-editing', windowEditMode);
@@ -281,10 +489,34 @@ if (guideCloseButton) {
   guideCloseButton.addEventListener('click', closeGuide);
 }
 
+if (assistantCloseButton) {
+  assistantCloseButton.addEventListener('click', closeAssistantChat);
+}
+
+if (assistantForm) {
+  assistantForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    sendAssistantMessage();
+  });
+}
+
+if (assistantInput) {
+  assistantInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      sendAssistantMessage();
+    }
+  });
+}
+
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (windowEditMode) {
     setWindowEditMode(false);
+    return;
+  }
+  if (assistantPanel && !assistantPanel.hidden) {
+    closeAssistantChat();
     return;
   }
   if (!guidePanel.hidden) closeGuide();
@@ -299,7 +531,10 @@ let queuedAlertAnimations = 0;
 let suppressNextParrotClick = false;
 let birdDrag = null;
 let birdResize = null;
+let assistantLongPressTimer = null;
+let assistantLongPressFired = false;
 let guideDrag = null;
+let assistantDrag = null;
 let speechDrag = null;
 let speechResize = null;
 
@@ -379,6 +614,27 @@ function moveSpeechTo(left, top, { allowOverflow = false } = {}) {
   });
 }
 
+function moveAssistantTo(left, top, { allowOverflow = false } = {}) {
+  if (!assistantPanel) return;
+
+  if (allowOverflow) {
+    assistantPanel.style.left = `${Math.round(left)}px`;
+    assistantPanel.style.top = `${Math.round(top)}px`;
+    assistantPanel.style.right = 'auto';
+    assistantPanel.style.bottom = 'auto';
+    assistantPanel.style.transform = 'none';
+  } else {
+    moveFloatingElementTo(assistantPanel, left, top, { margin: 8 });
+  }
+
+  writeLayout({
+    assistant: {
+      left: parseFloat(assistantPanel.style.left),
+      top: parseFloat(assistantPanel.style.top)
+    }
+  });
+}
+
 function setBirdSize(width, { persist = true } = {}) {
   if (!birdStage) return { width: birdDefaultSize.width, height: birdDefaultSize.height };
 
@@ -453,8 +709,16 @@ function captureContentRects() {
     });
   }
 
+  if (birdThinking && birdBubbleMode) {
+    rects.push({ key: 'birdBubble', rect: birdThinking.getBoundingClientRect() });
+  }
+
   if (guidePanel && !guidePanel.hidden) {
     rects.push({ key: 'guide', rect: guidePanel.getBoundingClientRect() });
+  }
+
+  if (assistantPanel && !assistantPanel.hidden) {
+    rects.push({ key: 'assistant', rect: assistantPanel.getBoundingClientRect() });
   }
 
   return rects.filter(({ rect }) => rect.width > 0 && rect.height > 0);
@@ -495,6 +759,11 @@ function shiftContentAfterWindowFit(rects, dx, dy) {
     moveGuideTo(guideRect.left - dx, guideRect.top - dy);
   }
 
+  const assistantRect = rectForKey(rects, 'assistant');
+  if (assistantRect && assistantPanel && !assistantPanel.hidden) {
+    moveAssistantTo(assistantRect.left - dx, assistantRect.top - dy, { allowOverflow: false });
+  }
+
   const birdRect = rectForKey(rects, 'bird');
   if (birdRect && birdStage) {
     moveBirdTo(birdRect.left - dx, birdRect.top - dy, { clampToWindow: false });
@@ -514,8 +783,8 @@ async function fitWindowToContent({ persistCompact = true } = {}) {
       type: 'fit-to-content',
       ...bounds,
       margin: windowFitMargin,
-      minWidth: guidePanel && !guidePanel.hidden ? 360 : 92,
-      minHeight: guidePanel && !guidePanel.hidden ? 300 : 88,
+      minWidth: (guidePanel && !guidePanel.hidden) || (assistantPanel && !assistantPanel.hidden) ? 360 : 92,
+      minHeight: (guidePanel && !guidePanel.hidden) || (assistantPanel && !assistantPanel.hidden) ? 300 : 88,
       persistCompact
     });
 
@@ -630,6 +899,16 @@ function restoreFloatingLayout() {
       moveBirdTo(rect.left, rect.top);
     }
   }
+
+  if (layout.assistant && assistantPanel) {
+    if (Number.isFinite(layout.assistant.left)) assistantPanel.style.left = `${layout.assistant.left}px`;
+    if (Number.isFinite(layout.assistant.top)) assistantPanel.style.top = `${layout.assistant.top}px`;
+    if (Number.isFinite(layout.assistant.left) || Number.isFinite(layout.assistant.top)) {
+      assistantPanel.style.right = 'auto';
+      assistantPanel.style.bottom = 'auto';
+      assistantPanel.style.transform = 'none';
+    }
+  }
 }
 
 function clampFloatingLayout() {
@@ -643,6 +922,11 @@ function clampFloatingLayout() {
   if (guidePanel && !guidePanel.hidden) {
     const rect = guidePanel.getBoundingClientRect();
     moveGuideTo(rect.left, rect.top);
+  }
+
+  if (assistantPanel && !assistantPanel.hidden) {
+    const rect = assistantPanel.getBoundingClientRect();
+    moveAssistantTo(rect.left, rect.top);
   }
 
   if (birdStage) {
@@ -866,6 +1150,43 @@ if (speech) {
   speech.addEventListener('pointercancel', stopWindowDrag);
 }
 
+if (assistantPanel) {
+  assistantPanel.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    if (event.target.closest('button, textarea, input, a, .assistant-messages, .assistant-reminders')) return;
+    assistantDrag = {
+      pointerId: event.pointerId,
+      lastScreenX: event.screenX,
+      lastScreenY: event.screenY
+    };
+    assistantPanel.setPointerCapture(event.pointerId);
+    assistantPanel.classList.add('dragging');
+    event.preventDefault();
+  });
+
+  assistantPanel.addEventListener('pointermove', (event) => {
+    if (!assistantDrag || assistantDrag.pointerId !== event.pointerId) return;
+    const dx = event.screenX - assistantDrag.lastScreenX;
+    const dy = event.screenY - assistantDrag.lastScreenY;
+    assistantDrag.lastScreenX = event.screenX;
+    assistantDrag.lastScreenY = event.screenY;
+    const rect = assistantPanel.getBoundingClientRect();
+    moveAssistantTo(rect.left + dx, rect.top + dy, { allowOverflow: true });
+    scheduleWindowFit({ persistCompact: false });
+  });
+
+  const stopAssistantDrag = (event) => {
+    if (!assistantDrag || assistantDrag.pointerId !== event.pointerId) return;
+    assistantPanel.releasePointerCapture(event.pointerId);
+    assistantPanel.classList.remove('dragging');
+    assistantDrag = null;
+    scheduleWindowFit({ persistCompact: false });
+  };
+
+  assistantPanel.addEventListener('pointerup', stopAssistantDrag);
+  assistantPanel.addEventListener('pointercancel', stopAssistantDrag);
+}
+
 if (speechHideButton) {
   speechHideButton.addEventListener('pointerdown', (event) => {
     event.stopPropagation();
@@ -914,15 +1235,23 @@ if (guideHeader) {
 
 const birdDragSurface = parrot || birdStage;
 
+function clearAssistantLongPress() {
+  if (!assistantLongPressTimer) return;
+  clearTimeout(assistantLongPressTimer);
+  assistantLongPressTimer = null;
+}
+
 birdDragSurface.addEventListener('contextmenu', (event) => {
   event.preventDefault();
   birdClickCount = 0;
   clearTimeout(birdClickTimer);
+  clearAssistantLongPress();
   setWindowEditMode(!windowEditMode);
 });
 
 birdDragSurface.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
+  assistantLongPressFired = false;
   birdDrag = {
     pointerId: event.pointerId,
     lastScreenX: event.screenX,
@@ -931,6 +1260,15 @@ birdDragSurface.addEventListener('pointerdown', (event) => {
     moved: false
   };
   birdDragSurface.setPointerCapture(event.pointerId);
+
+  if (!event.altKey) {
+    assistantLongPressTimer = setTimeout(() => {
+      if (!birdDrag || birdDrag.pointerId !== event.pointerId || birdDrag.moved) return;
+      assistantLongPressFired = true;
+      suppressNextParrotClick = true;
+      openAssistantChat();
+    }, assistantLongPressMs);
+  }
 });
 
 birdDragSurface.addEventListener('pointermove', (event) => {
@@ -942,6 +1280,8 @@ birdDragSurface.addEventListener('pointermove', (event) => {
   birdDrag.lastScreenY = event.screenY;
   birdDrag.totalDistance += Math.hypot(moveX, moveY);
 
+  if (birdDrag.totalDistance > assistantDragThreshold) clearAssistantLongPress();
+  if (assistantLongPressFired) return;
   if (birdDrag.totalDistance <= 4) return;
   birdDrag.moved = true;
   window.buddy.windowAction({ type: 'move-by', dx: moveX, dy: moveY });
@@ -950,11 +1290,13 @@ birdDragSurface.addEventListener('pointermove', (event) => {
 function stopBirdDrag(event) {
   if (!birdDrag || birdDrag.pointerId !== event.pointerId) return;
   birdDragSurface.releasePointerCapture(event.pointerId);
-  suppressNextParrotClick = birdDrag.moved;
+  clearAssistantLongPress();
+  suppressNextParrotClick = birdDrag.moved || assistantLongPressFired;
   birdDrag = null;
   if (suppressNextParrotClick) {
     setTimeout(() => {
       suppressNextParrotClick = false;
+      assistantLongPressFired = false;
     }, 80);
   }
 }
@@ -981,6 +1323,7 @@ birdDragSurface.addEventListener('click', (event) => {
     clearTimeout(birdClickTimer);
     setSpeechVisible(true);
     playPokeAnimation();
+    showRandomBirdThought();
     window.buddy.windowAction({
       type: 'poke',
       pointer: {
@@ -1001,6 +1344,7 @@ birdDragSurface.addEventListener('click', (event) => {
   }
 
   playPokeAnimation();
+  showRandomBirdThought();
   window.buddy.windowAction({
     type: 'poke',
     pointer: {
@@ -1023,3 +1367,4 @@ setWindowEditMode(true);
 window.buddy.onTasksChanged(render);
 window.buddy.onAgentAlert(playAlertAnimation);
 window.buddy.getSnapshot().then(render);
+loadAssistantSnapshot();

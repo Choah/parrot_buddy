@@ -120,6 +120,7 @@ function extractText(value, depth = 0) {
 }
 
 const HUMAN_CONFIRMATION_PATTERN = /(진행해도|진행할까요|계속할까요|실행해도|실행할까요|덮어써도|stage해도|스테이지해도|커밋해도|커밋할까요|푸시해도|푸시할까요|저장할까요|수정할까요|적용할까요|삭제할까요|변경할까요|승인(이|을)?\s*필요|승인해도|승인할까요|승인해\s*주세요|허가(가|를)?\s*필요|권한(이|을)?\s*필요|확인(이|을)?\s*필요|please\s+confirm|confirm\s+(whether|that|before)|should i|should we|would you like me to|needs?\s+(approval|confirmation|permission)|requires?\s+(approval|confirmation|permission)|\b(can|may|should)\s+(i|we)\s+(proceed|continue)\b|\bwould\s+you\s+like\s+(me|us)\s+to\s+(proceed|continue)\b)/i;
+const COMPLETED_CONFIRMATION_PATTERN = /(진행할까요|계속할까요|실행할까요|커밋할까요|푸시할까요|저장할까요|수정할까요|적용할까요|삭제할까요|변경할까요|승인할까요|승인해\s*주세요|확인해\s*주세요|선택해\s*주세요|어떻게\s*할까요|원하시나요|할까요\?|해도\s*될까요|please\s+confirm|should i|should we|would you like me to|\b(can|may|should)\s+(i|we)\s+(proceed|continue)\b|\bwould\s+you\s+like\s+(me|us)\s+to\s+(proceed|continue)\b)/i;
 
 function messageLooksHitl(value) {
   const text = compactText(value);
@@ -132,7 +133,7 @@ function completedMessageLooksHitl(value) {
   const text = compactText(value);
   if (!text) return false;
 
-  return HUMAN_CONFIRMATION_PATTERN.test(text);
+  return COMPLETED_CONFIRMATION_PATTERN.test(text);
 }
 
 function parseToolArguments(raw) {
@@ -1202,6 +1203,7 @@ class AgentMonitor {
 module.exports = {
   AgentMonitor,
   collectFiles,
+  completedMessageLooksHitl,
   hasClaudeProcess,
   hasCodexProcess,
   listClaudeRootProcesses,
