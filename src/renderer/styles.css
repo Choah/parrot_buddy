@@ -12,6 +12,7 @@
   --running: #2f6fa3;
   --waiting: #6f8d25;
   --failed: #cc5148;
+  --panel-shadow: 0 8px 18px rgba(61, 39, 10, 0.08);
 }
 
 * {
@@ -670,7 +671,7 @@ body.window-editing .bird-resize-handle {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--panel);
-  box-shadow: 0 20px 44px rgba(61, 39, 10, 0.22);
+  box-shadow: var(--panel-shadow);
   backdrop-filter: blur(16px);
 }
 
@@ -695,7 +696,7 @@ body.window-editing .bird-resize-handle {
   border: 1px solid rgba(90, 61, 17, 0.1);
   border-radius: 12px;
   background: rgba(255, 251, 236, 0.97);
-  box-shadow: 0 12px 28px rgba(61, 39, 10, 0.16);
+  box-shadow: var(--panel-shadow);
   backdrop-filter: blur(16px);
 }
 
