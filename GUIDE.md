@@ -41,19 +41,19 @@ Codex 또는 Claude Code가 작업 중이거나 확인을 기다리는 동안에
 
 ## 4. 화면 조작
 
-- 상태 박스 드래그: 앱 창 전체 이동
+- 상태 박스 드래그: 상태 박스 위치 이동
 - 상태 박스 왼쪽/오른쪽 아래 핸들: 박스 크기 조정
 - 상태 박스 오른쪽 위 `×`: 상태 박스 숨기기
-- 흰색 `window size` 외곽선: 실제 Parrot Buddy 창 크기. 이 영역은 투명해 보여도 뒤 앱 클릭을 막을 수 있어 최소 크기로 유지하는 게 좋음
+- 흰색 `window size` 외곽선: 실제 Parrot Buddy 창 크기. **크게 만들면 뒤에 켜져 있는 앱이나 창 클릭을 막을 수 있어 최소 크기로 유지하는 게 좋음**
 - `window size` 옆 `guide` 버튼 클릭: guide 열기
-- 앵무새 이동/상태 박스 크기 조절 후: 흰색 창 영역이 내용에 맞춰 자동 최적화
-- 앵무새 드래그: 창 안에서 앵무새 위치 조정
-- Command를 누른 채 앵무새 드래그: 앱 창 전체 이동
+- 상태 박스 이동/크기 조절 후: 흰색 창 영역이 내용에 맞춰 자동 최적화
+- 앵무새 드래그: 앱 창 전체 이동
+- `window size`가 보일 때 앵무새 오른쪽 아래 작은 손잡이 드래그: 앵무새 크기 조절. 현재 크기가 기본값
 - Guide 제목 줄 드래그: 앱 창 전체 이동
 - 앵무새 클릭: 또잉 애니메이션
 - 상태 박스가 숨겨진 상태에서 앵무새 클릭: 상태 박스 다시 표시
 - 앵무새 빠르게 3번 클릭: guide 열기/닫기
-- 앵무새 우클릭 또는 Option을 누른 채 앵무새 클릭: 흰색 `window size` 외곽선 숨기기/다시 표시
+- **앵무새 우클릭 또는 Option을 누른 채 앵무새 클릭: 흰색 `window size` 외곽선 숨기기/다시 표시**
 - 외곽선 모서리 드래그: 클릭을 막는 투명 창 영역 크기 조정. 상태 박스도 작은 창 크기에 맞춰 줄어듦
 - Esc: guide 또는 창 크기 조정 모드 닫기
 
@@ -92,7 +92,17 @@ Claude Code processes / IDE locks
 npm test
 npm run build:icon
 npm run start
+npm run dist:mac
 ```
+
+GitHub Release에 DMG를 올릴 때는 버전 태그를 push합니다.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+그러면 GitHub Actions가 `Parrot-Buddy-macOS-<version>-<arch>.dmg`와 `.zip`을 Release assets에 첨부합니다.
 
 앱이 이상하게 남아 있으면:
 

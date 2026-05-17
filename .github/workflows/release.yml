@@ -1,0 +1,72 @@
+name: Release macOS DMG
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build DMG and ZIP
+        run: npm run dist:mac
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Parrot-Buddy-macOS
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+          body: |
+            ## 설치 파일
+
+            - `Parrot-Buddy-macOS-*.dmg`: 일반 사용자에게 권장
+            - `Parrot-Buddy-macOS-*.zip`: 압축 파일로 직접 받아서 사용하고 싶은 경우
+
+            ## 설치 방법
+
+            ### DMG
+
+            1. `Parrot-Buddy-macOS-*.dmg` 다운로드
+            2. dmg 열기
+            3. `Parrot Buddy.app`을 `Applications` 폴더로 드래그
+            4. 처음 실행 시 macOS 보안 경고가 나오면 System Settings -> Privacy & Security에서 "Open Anyway" 선택
+
+            ### ZIP
+
+            1. `Parrot-Buddy-macOS-*.zip` 다운로드
+            2. 압축 해제
+            3. `Parrot Buddy.app`을 `Applications` 폴더로 이동
+            4. 처음 실행 시 macOS 보안 경고가 나오면 System Settings -> Privacy & Security에서 "Open Anyway" 선택

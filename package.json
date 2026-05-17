@@ -14,6 +14,7 @@
     "install:shell": "node ./scripts/install-shell.js",
     "uninstall:shell": "node ./scripts/uninstall-shell.js",
     "start": "electron .",
+    "dist:mac": "npm run build:icon && electron-builder --mac dmg zip --publish never",
     "test": "node --test tests/*.test.js",
     "check": "npm test"
   },
@@ -26,7 +27,50 @@
   ],
   "author": "",
   "license": "MIT",
+  "build": {
+    "appId": "com.choah.parrot-buddy",
+    "productName": "Parrot Buddy",
+    "artifactName": "Parrot-Buddy-macOS-${version}-${arch}.${ext}",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "bin/**/*",
+      "shell/**/*",
+      "package.json",
+      "!assets/parrot-buddy-demo.gif",
+      "!assets/parrot-buddy-demo.mov"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "assets/app-icon.icns",
+      "identity": null,
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "dmg": {
+      "title": "Parrot Buddy ${version}",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
   "devDependencies": {
-    "electron": "^42.1.0"
+    "electron": "^42.1.0",
+    "electron-builder": "^26.8.1"
   }
 }

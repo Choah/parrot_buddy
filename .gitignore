@@ -1,4 +1,5 @@
 node_modules/
+dist/
 .parrot-buddy.pid
 .DS_Store
 npm-debug.log*

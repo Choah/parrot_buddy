@@ -16,12 +16,17 @@ const speechHideButton = document.getElementById('speechHideButton');
 const speechResizeHandle = document.getElementById('speechResizeHandle');
 const speechResizeLeftHandle = document.getElementById('speechResizeLeftHandle');
 const birdStage = document.querySelector('.bird-stage');
+const birdResizeHandle = document.getElementById('birdResizeHandle');
 const windowFrameEditor = document.getElementById('windowFrameEditor');
 const windowResizeHandles = document.querySelectorAll('.window-resize-handle');
-const layoutStorageKey = 'parrotBuddyLayoutV6';
+const layoutStorageKey = 'parrotBuddyLayoutV7';
 const enableSpeechFloating = false;
 const speechMargin = 8;
 const speechMinSize = { width: 96, height: 40 };
+const birdDefaultSize = { width: 92, height: 96 };
+const birdMinWidth = 54;
+const birdMaxWidth = 220;
+const birdAspectHeight = birdDefaultSize.height / birdDefaultSize.width;
 const windowFitMargin = 10;
 let windowFitTimer = null;
 let fittingWindow = false;
@@ -291,10 +296,10 @@ let pokeAnimationTimer = null;
 let alertAnimationTimer = null;
 let suppressNextParrotClick = false;
 let birdDrag = null;
+let birdResize = null;
 let guideDrag = null;
 let speechDrag = null;
 let speechResize = null;
-let windowDrag = null;
 
 function playPokeAnimation() {
   clearTimeout(pokeAnimationTimer);
@@ -341,8 +346,17 @@ function moveGuideTo(left, top) {
   });
 }
 
-function moveSpeechTo(left, top) {
-  moveFloatingElementTo(speech, left, top, { margin: 0 });
+function moveSpeechTo(left, top, { allowOverflow = false } = {}) {
+  if (allowOverflow) {
+    speech.style.left = `${Math.round(left)}px`;
+    speech.style.top = `${Math.round(top)}px`;
+    speech.style.right = 'auto';
+    speech.style.bottom = 'auto';
+    speech.style.transform = 'none';
+  } else {
+    moveFloatingElementTo(speech, left, top, { margin: 0 });
+  }
+
   writeLayout({
     speech: {
       ...readLayout().speech,
@@ -350,6 +364,32 @@ function moveSpeechTo(left, top) {
       top: parseFloat(speech.style.top)
     }
   });
+}
+
+function setBirdSize(width, { persist = true } = {}) {
+  if (!birdStage) return { width: birdDefaultSize.width, height: birdDefaultSize.height };
+
+  const nextWidth = Math.round(clamp(Number(width) || birdDefaultSize.width, birdMinWidth, birdMaxWidth));
+  const nextHeight = Math.round(nextWidth * birdAspectHeight);
+  birdStage.style.setProperty('--bird-width', `${nextWidth}px`);
+  birdStage.style.setProperty('--bird-height', `${nextHeight}px`);
+
+  if (persist) {
+    writeLayout({
+      bird: {
+        ...readLayout().bird,
+        width: nextWidth,
+        height: nextHeight
+      }
+    });
+  }
+
+  return { width: nextWidth, height: nextHeight };
+}
+
+function currentBirdWidth() {
+  const rect = parrot.getBoundingClientRect();
+  return Number.isFinite(rect.width) && rect.width > 0 ? rect.width : birdDefaultSize.width;
 }
 
 function moveBirdTo(left, top, { clampToWindow = true } = {}) {
@@ -372,6 +412,7 @@ function moveBirdTo(left, top, { clampToWindow = true } = {}) {
 
   writeLayout({
     bird: {
+      ...readLayout().bird,
       left: parseFloat(birdStage.style.left),
       top: parseFloat(birdStage.style.top)
     }
@@ -485,7 +526,7 @@ function setSpeechVisible(visible, persist = true) {
   speech.hidden = !visible;
   if (!visible) {
     speech.classList.remove('dragging');
-    windowDrag = null;
+    speechDrag = null;
     speechResize = null;
   }
   if (!persist) return;
@@ -563,6 +604,9 @@ function restoreFloatingLayout() {
   }
 
   if (layout.bird && birdStage) {
+    if (Number.isFinite(layout.bird.width)) {
+      setBirdSize(layout.bird.width, { persist: false });
+    }
     if (Number.isFinite(layout.bird.left) && Number.isFinite(layout.bird.top)) {
       birdStage.style.left = `${layout.bird.left}px`;
       birdStage.style.top = `${layout.bird.top}px`;
@@ -733,10 +777,50 @@ function setupWindowResizeHandle(handle) {
 
 windowResizeHandles.forEach(setupWindowResizeHandle);
 
+if (birdResizeHandle) {
+  birdResizeHandle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    birdResize = {
+      pointerId: event.pointerId,
+      startScreenX: event.screenX,
+      startScreenY: event.screenY,
+      startWidth: currentBirdWidth()
+    };
+    birdResizeHandle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  birdResizeHandle.addEventListener('pointermove', (event) => {
+    if (!birdResize || birdResize.pointerId !== event.pointerId) return;
+    const dx = event.screenX - birdResize.startScreenX;
+    const dy = event.screenY - birdResize.startScreenY;
+    const nextWidth = birdResize.startWidth + (dx + dy / birdAspectHeight) / 2;
+    setBirdSize(nextWidth);
+    const rect = parrot.getBoundingClientRect();
+    moveBirdTo(rect.left, rect.top, { clampToWindow: false });
+    scheduleWindowFit();
+  });
+
+  const stopBirdResize = (event) => {
+    if (!birdResize || birdResize.pointerId !== event.pointerId) return;
+    birdResizeHandle.releasePointerCapture(event.pointerId);
+    birdResize = null;
+    scheduleWindowFit();
+  };
+
+  birdResizeHandle.addEventListener('pointerup', stopBirdResize);
+  birdResizeHandle.addEventListener('pointercancel', stopBirdResize);
+  birdResizeHandle.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+}
+
 if (speech) {
   speech.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || event.target.closest('.speech-resize-handle, .speech-hide-button')) return;
-    windowDrag = {
+    speechDrag = {
       pointerId: event.pointerId,
       lastScreenX: event.screenX,
       lastScreenY: event.screenY
@@ -747,19 +831,22 @@ if (speech) {
   });
 
   speech.addEventListener('pointermove', (event) => {
-    if (!windowDrag || windowDrag.pointerId !== event.pointerId) return;
-    const dx = event.screenX - windowDrag.lastScreenX;
-    const dy = event.screenY - windowDrag.lastScreenY;
-    windowDrag.lastScreenX = event.screenX;
-    windowDrag.lastScreenY = event.screenY;
-    window.buddy.windowAction({ type: 'move-by', dx, dy });
+    if (!speechDrag || speechDrag.pointerId !== event.pointerId) return;
+    const dx = event.screenX - speechDrag.lastScreenX;
+    const dy = event.screenY - speechDrag.lastScreenY;
+    speechDrag.lastScreenX = event.screenX;
+    speechDrag.lastScreenY = event.screenY;
+    const rect = speech.getBoundingClientRect();
+    moveSpeechTo(rect.left + dx, rect.top + dy, { allowOverflow: true });
+    scheduleWindowFit();
   });
 
   const stopWindowDrag = (event) => {
-    if (!windowDrag || windowDrag.pointerId !== event.pointerId) return;
+    if (!speechDrag || speechDrag.pointerId !== event.pointerId) return;
     speech.releasePointerCapture(event.pointerId);
     speech.classList.remove('dragging');
-    windowDrag = null;
+    speechDrag = null;
+    scheduleWindowFit();
   };
 
   speech.addEventListener('pointerup', stopWindowDrag);
@@ -823,16 +910,10 @@ birdDragSurface.addEventListener('contextmenu', (event) => {
 
 birdDragSurface.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
-  const rect = parrot.getBoundingClientRect();
   birdDrag = {
     pointerId: event.pointerId,
-    mode: event.metaKey ? 'window' : 'bird',
-    startX: event.clientX,
-    startY: event.clientY,
     lastScreenX: event.screenX,
     lastScreenY: event.screenY,
-    left: rect.left,
-    top: rect.top,
     totalDistance: 0,
     moved: false
   };
@@ -850,23 +931,14 @@ birdDragSurface.addEventListener('pointermove', (event) => {
 
   if (birdDrag.totalDistance <= 4) return;
   birdDrag.moved = true;
-  if (birdDrag.mode === 'window') {
-    window.buddy.windowAction({ type: 'move-by', dx: moveX, dy: moveY });
-    return;
-  }
-
-  const rect = parrot.getBoundingClientRect();
-  moveBirdTo(rect.left + moveX, rect.top + moveY, { clampToWindow: false });
-  scheduleWindowFit();
+  window.buddy.windowAction({ type: 'move-by', dx: moveX, dy: moveY });
 });
 
 function stopBirdDrag(event) {
   if (!birdDrag || birdDrag.pointerId !== event.pointerId) return;
-  const movedBirdOnly = birdDrag.moved && birdDrag.mode === 'bird';
   birdDragSurface.releasePointerCapture(event.pointerId);
   suppressNextParrotClick = birdDrag.moved;
   birdDrag = null;
-  if (movedBirdOnly) scheduleWindowFit();
   if (suppressNextParrotClick) {
     setTimeout(() => {
       suppressNextParrotClick = false;

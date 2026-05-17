@@ -15,7 +15,7 @@ Codex와 Claude Code가 지금 작업 중인지, 확인을 기다리는지, 끝�
 ### 1. 요구사항
 
 - macOS
-- Node.js 20 이상 권장
+- Node.js 22 이상 권장
 - npm
 - Git
 
@@ -84,17 +84,17 @@ curl http://127.0.0.1:17872/health
 ### 4. 처음 실행하면 보이는 것
 
 - 흰색 `window size` 외곽선은 실제 Parrot Buddy 창 크기입니다.
-- 이 영역은 투명해 보여도 뒤에 있는 앱 클릭을 막을 수 있습니다.
+- **이 영역을 크게 만들면 뒤에 켜져 있는 앱이나 창 클릭을 막을 수 있습니다.**
 - 그래서 앵무새와 상태 박스를 감싸는 최소 크기로 두는 것이 좋습니다.
 - `window size` 옆 `guide` 버튼을 누르면 앱 안에서 사용법을 볼 수 있습니다.
 
 ### 5. 조작법
 
-- 앵무새 드래그: 창 안에서 앵무새 위치 조정
-- Command를 누른 채 앵무새 드래그: Parrot Buddy 창 전체 이동
+- 앵무새 드래그: Parrot Buddy 창 전체 이동
+- `window size`가 보일 때 앵무새 오른쪽 아래 작은 손잡이 드래그: 앵무새 크기 조절. 현재 크기가 기본값입니다.
 - Guide 제목 줄 드래그: guide가 열린 상태에서 창 전체 이동
-- 앵무새 우클릭 또는 Option을 누른 채 앵무새 클릭: 흰색 `window size` 외곽선 숨기기/다시 표시
-- 상태 박스 드래그: Parrot Buddy 창 전체 이동
+- **앵무새 우클릭 또는 Option을 누른 채 앵무새 클릭: 흰색 `window size` 외곽선 숨기기/다시 표시**
+- 상태 박스 드래그: 상태 박스 위치 이동
 - 상태 박스 왼쪽/오른쪽 아래 핸들: 상태 박스 크기 조정
 - 상태 박스 오른쪽 위 `×`: 상태 박스 숨기기
 - 상태 박스가 숨겨진 상태에서 앵무새 클릭: 상태 박스 다시 표시
@@ -102,7 +102,7 @@ curl http://127.0.0.1:17872/health
 - 외곽선 모서리 드래그: 실제 투명 창 크기 수동 조정
 - Esc: guide 또는 창 크기 조정 모드 닫기
 
-앵무새를 옮기거나 상태 박스 크기를 조절하면 흰색 창 영역이 내용에 맞춰 자동으로 줄거나 늘어납니다.
+상태 박스를 옮기거나 크기를 조절하면 흰색 창 영역이 내용에 맞춰 자동으로 줄거나 늘어납니다.
 
 ### 6. 메뉴바 사용
 
@@ -172,6 +172,7 @@ npm run install:app
 npm test
 npm run build:icon
 npm run start
+npm run dist:mac
 ```
 
 Optional shell helper는 별도 로컬 명령을 Parrot Buddy bridge에 직접 등록하고 싶을 때만 설치하세요.
@@ -181,6 +182,30 @@ npm run install:shell
 npm run uninstall:shell
 ```
 
+### 11. GitHub Release에 DMG 올리기
+
+태그를 push하면 GitHub Actions가 macOS에서 `.dmg`와 `.zip`을 빌드해서 Release assets에 자동으로 첨부합니다.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+생성되는 파일:
+
+```text
+Parrot-Buddy-macOS-0.1.0-<arch>.dmg
+Parrot-Buddy-macOS-0.1.0-<arch>.zip
+```
+
+로컬에서 먼저 확인하려면:
+
+```bash
+npm run dist:mac
+```
+
+빌드 결과는 `dist/`에 생기며 git에는 포함하지 않습니다.
+
 ---
 
 ## English Guide
@@ -188,7 +213,7 @@ npm run uninstall:shell
 ### 1. Requirements
 
 - macOS
-- Node.js 20 or newer recommended
+- Node.js 22 or newer recommended
 - npm
 - Git
 
@@ -257,17 +282,17 @@ curl http://127.0.0.1:17872/health
 ### 4. First Launch
 
 - The white `window size` outline is the real Parrot Buddy window.
-- Even though it is transparent, this area can block clicks to apps behind it.
+- **If this area is too large, it can block clicks to apps or windows behind it.**
 - Keep it as small as possible around the parrot and status box.
 - Click the `guide` button next to `window size` to open the in-app guide.
 
 ### 5. Controls
 
-- Drag the parrot: move only the parrot inside the window
-- Command + drag the parrot: move the whole Parrot Buddy window
+- Drag the parrot: move the whole Parrot Buddy window
+- When `window size` is visible, drag the small handle at the lower-right of the parrot: resize the parrot. The current size is the default.
 - Drag the Guide title bar: move the whole window while the guide is open
-- Right-click the parrot or Option + click the parrot: hide/show the white `window size` outline
-- Drag the status box: move the whole Parrot Buddy window
+- **Right-click the parrot or Option + click the parrot: hide/show the white `window size` outline**
+- Drag the status box: move the status box inside the window
 - Drag the lower-left/lower-right handles on the status box: resize the status box
 - Click `×` on the status box: hide the status box
 - Click the parrot while the status box is hidden: show the status box again
@@ -275,7 +300,7 @@ curl http://127.0.0.1:17872/health
 - Drag the white outline corners: manually resize the transparent window
 - Esc: close the guide or window resize mode
 
-When you move the parrot or resize the status box, the white window area automatically fits around the visible content.
+When you move or resize the status box, the white window area automatically fits around the visible content.
 
 ### 6. Menu Bar
 
@@ -345,6 +370,7 @@ npm run install:app
 npm test
 npm run build:icon
 npm run start
+npm run dist:mac
 ```
 
 Install optional shell helpers only if you want to manually report local command status to the Parrot Buddy bridge.
@@ -353,6 +379,30 @@ Install optional shell helpers only if you want to manually report local command
 npm run install:shell
 npm run uninstall:shell
 ```
+
+### 11. GitHub Release DMG
+
+Pushing a version tag triggers GitHub Actions to build `.dmg` and `.zip` files on macOS and attach them to the GitHub Release.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Generated files:
+
+```text
+Parrot-Buddy-macOS-0.1.0-<arch>.dmg
+Parrot-Buddy-macOS-0.1.0-<arch>.zip
+```
+
+To test the package locally first:
+
+```bash
+npm run dist:mac
+```
+
+The output is written to `dist/`, which is ignored by git.
 
 ---
 
