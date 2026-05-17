@@ -735,7 +735,8 @@ class AgentMonitor {
           finishedAt: new Date(lastSeenMs).toISOString(),
           status: 'stopped',
           filePath: turn.filePath,
-          fileMtimeMs: lastSeenMs
+          fileMtimeMs: lastSeenMs,
+          silent: true
         });
       }
     }
@@ -799,7 +800,8 @@ class AgentMonitor {
           source: 'agent',
           command: turn.message || turnCommand(context.cwd, turn.turnId, status === 'success' ? 'done' : status),
           status,
-          finishedAt: turn.finishedAt || nowIso()
+          finishedAt: turn.finishedAt || nowIso(),
+          silent: Boolean(turn.silent)
         });
       }
     }
@@ -1108,11 +1110,20 @@ class AgentMonitor {
         finishedAt: new Date(finishedMs).toISOString(),
         status: 'stopped',
         filePath: turn.filePath,
-        fileMtimeMs: finishedMs
+        fileMtimeMs: finishedMs,
+        silent: true
       });
     }
 
     this.trimCompletedCodexTurns();
+  }
+
+  hasOtherActiveAgentTask(currentId) {
+    return this.store.snapshot().tasks.some((task) => (
+      task.id !== currentId
+      && task.source === 'agent'
+      && (task.status === 'running' || task.status === 'hitl')
+    ));
   }
 
   noteTransition(id, previous, next, task) {
@@ -1123,6 +1134,7 @@ class AgentMonitor {
       return;
     }
     if ((previous === 'running' || previous === 'hitl') && next !== 'running' && next !== 'hitl') {
+      if (task?.silent || this.hasOtherActiveAgentTask(id)) return;
       this.onAgentFinished?.(task);
     }
   }

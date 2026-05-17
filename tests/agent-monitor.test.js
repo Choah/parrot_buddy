@@ -263,6 +263,77 @@ test('limits same-folder active Codex turns to live terminal count', () => {
   ]);
 });
 
+test('does not alert when one subagent finishes while another agent task is active', () => {
+  const store = new TaskStore();
+  const finished = [];
+  const monitor = new AgentMonitor({
+    store,
+    pollMs: 999999,
+    onAgentFinished: (task) => finished.push(task)
+  });
+
+  store.upsertTask({
+    id: 'codex-turn-parent',
+    label: 'Codex: book #parent',
+    source: 'agent',
+    command: '/tmp/book · working',
+    status: 'running'
+  });
+  store.upsertTask({
+    id: 'codex-turn-subagent',
+    label: 'Codex: book #subagent',
+    source: 'agent',
+    command: '/tmp/book · working',
+    status: 'running'
+  });
+
+  monitor.noteTransition('codex-turn-subagent', 'running', 'success', {
+    id: 'codex-turn-subagent',
+    label: 'Codex: book #subagent',
+    source: 'agent',
+    status: 'success'
+  });
+  assert.equal(finished.length, 0);
+
+  store.removeTask('codex-turn-subagent');
+  monitor.noteTransition('codex-turn-parent', 'running', 'success', {
+    id: 'codex-turn-parent',
+    label: 'Codex: book #parent',
+    source: 'agent',
+    status: 'success'
+  });
+  assert.equal(finished.length, 1);
+  assert.equal(finished[0].id, 'codex-turn-parent');
+});
+
+test('keeps synthetic Codex cleanup silent', () => {
+  const store = new TaskStore();
+  const finished = [];
+  const monitor = new AgentMonitor({
+    store,
+    pollMs: 999999,
+    onAgentFinished: (task) => finished.push(task)
+  });
+
+  store.upsertTask({
+    id: 'codex-turn-stale',
+    label: 'Codex: stale #turn',
+    source: 'agent',
+    command: '/tmp/stale · working',
+    status: 'running'
+  });
+
+  monitor.noteTransition('codex-turn-stale', 'running', 'stopped', {
+    id: 'codex-turn-stale',
+    label: 'Codex: stale #turn',
+    source: 'agent',
+    status: 'stopped',
+    silent: true
+  });
+
+  assert.equal(finished.length, 0);
+});
+
 test('does not show Claude Code ready for stale IDE locks owned by non-Claude processes', () => {
   const lockRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'parrot-claude-locks-'));
   fs.writeFileSync(path.join(lockRoot, '30594.lock'), JSON.stringify({
