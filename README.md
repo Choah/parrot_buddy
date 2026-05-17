@@ -117,9 +117,10 @@ Codex 또는 Claude Code가 작업 중이거나 확인을 기다리는 동안에
 
 알림 기준:
 
-- **사용자 확인이 필요한 `confirm` 상태**가 되면 소리와 앵무새 또잉 알림이 납니다.
-- **Codex/Claude Code의 활성 agent 작업이 전부 끝난 순간**에도 한 번 알립니다.
-- 다른 독립 Codex/Claude Code 작업이 켜져 있어도, 해당 top-level 작업이 끝나면 알립니다.
+- **각 터미널/세션에서 사용자 확인이 필요한 `confirm` 상태**가 되면 소리와 앵무새 또잉 알림이 납니다.
+- **각 터미널/세션의 top-level Codex/Claude Code 작업이 끝난 순간** 알립니다.
+- 소리 구분: **작업 완료는 짹짹 2번**, **사용자 확인 필요는 짹 1번**입니다.
+- 다른 독립 Codex/Claude Code 작업이 켜져 있어도, 해당 터미널/세션 작업 완료는 따로 알립니다.
 - 개별 서브에이전트가 먼저 끝나는 경우에는 소리나 또잉 없이 상태만 조용히 갱신합니다.
 
 ### 7. 상태 의미
@@ -322,9 +323,10 @@ The menu bar icon wiggles while Codex or Claude Code is working or waiting for c
 
 Notification rules:
 
-- It chirps and bounces when the app enters a `confirm` state that needs user attention.
-- It also alerts once when all active Codex/Claude Code agent work has finished.
-- If another independent Codex/Claude Code task is still open, a finished top-level task can still alert.
+- It chirps and bounces when a terminal/session enters a `confirm` state that needs user attention.
+- It alerts when a top-level Codex/Claude Code task finishes in that terminal/session.
+- Sound cue: **task complete chirps twice**, while **user confirmation chirps once**.
+- If another independent Codex/Claude Code task is still open, the finished terminal/session still alerts separately.
 - Individual subagent completions update the status quietly without a chirp or bounce.
 
 ### 7. Status Meanings

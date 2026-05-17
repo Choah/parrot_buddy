@@ -27,7 +27,7 @@ const COMPACT_WINDOW_SIZE = {
   height: COMPACT_WINDOW_BOUNDS.height
 };
 const GUIDE_WINDOW_SIZE = { width: 430, height: 520 };
-const MIN_WINDOW_SIZE = { width: 128, height: 112 };
+const MIN_WINDOW_SIZE = { width: 92, height: 88 };
 const MAX_TRAY_STATUS_ITEMS = 6;
 let compactWindowSize = { ...COMPACT_WINDOW_SIZE };
 let guideWindowOpen = false;

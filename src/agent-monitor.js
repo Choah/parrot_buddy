@@ -107,18 +107,32 @@ function compactText(value) {
     .trim();
 }
 
+function extractText(value, depth = 0) {
+  if (!value || depth > 5) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map((item) => extractText(item, depth + 1)).filter(Boolean).join(' ');
+  if (typeof value !== 'object') return '';
+
+  return ['text', 'content', 'message', 'result', 'error', 'summary']
+    .map((key) => extractText(value[key], depth + 1))
+    .filter(Boolean)
+    .join(' ');
+}
+
+const HUMAN_CONFIRMATION_PATTERN = /(진행해도|진행할까요|계속할까요|실행해도|실행할까요|덮어써도|stage해도|스테이지해도|커밋해도|커밋할까요|푸시해도|푸시할까요|저장할까요|수정할까요|적용할까요|삭제할까요|변경할까요|승인(이|을)?\s*필요|승인해도|승인할까요|승인해\s*주세요|허가(가|를)?\s*필요|권한(이|을)?\s*필요|확인(이|을)?\s*필요|please\s+confirm|confirm\s+(whether|that|before)|should i|should we|would you like me to|needs?\s+(approval|confirmation|permission)|requires?\s+(approval|confirmation|permission)|\b(can|may|should)\s+(i|we)\s+(proceed|continue)\b|\bwould\s+you\s+like\s+(me|us)\s+to\s+(proceed|continue)\b)/i;
+
 function messageLooksHitl(value) {
   const text = compactText(value);
   if (!text) return false;
 
-  return /(될까요|할까요|해도 될까요|진행해도|실행해도|덮어써도|stage해도|커밋해도|푸시해도|승인|허가|approval|approve|permission)/i.test(text);
+  return HUMAN_CONFIRMATION_PATTERN.test(text);
 }
 
 function completedMessageLooksHitl(value) {
   const text = compactText(value);
   if (!text) return false;
 
-  return /(될까요|할까요|\bapproval\b|\bapprove\b|\bpermission\b)/i.test(text);
+  return HUMAN_CONFIRMATION_PATTERN.test(text);
 }
 
 function parseToolArguments(raw) {
@@ -256,6 +270,17 @@ function parseClaudeLine(line) {
   }
 
   if (entry.type === 'assistant') {
+    const text = compactText(extractText(entry.message || entry.content || entry.response || entry)).slice(0, 180);
+    if (messageLooksHitl(text)) {
+      return {
+        type: 'hitl',
+        at,
+        cwd,
+        sessionId: entry.sessionId || null,
+        command: text || 'Claude Code needs confirmation'
+      };
+    }
+
     return {
       type: entry.error || entry.isApiErrorMessage ? 'error' : 'assistant',
       at,
@@ -730,6 +755,16 @@ class AgentMonitor {
       cwd: event.cwd || existing.cwd || null,
       lastType: event.type,
       lastAt: event.at || nowIso(),
+      needsAttention: event.type === 'hitl'
+        ? true
+        : ['user', 'tool_use', 'tool_result'].includes(event.type)
+          ? false
+          : Boolean(existing.needsAttention),
+      attentionText: event.type === 'hitl'
+        ? event.command || 'Claude Code needs confirmation'
+        : ['user', 'tool_use', 'tool_result'].includes(event.type)
+          ? null
+          : existing.attentionText || null,
       filePath: event.filePath || existing.filePath,
       fileMtimeMs: event.fileMtimeMs
     });
@@ -947,7 +982,8 @@ class AgentMonitor {
 
     for (const [sessionKey, session] of this.claudeSessions) {
       const seenMs = timestampMs(session.lastAt) || session.fileMtimeMs || 0;
-      if (seenMs && now - seenMs < CLAUDE_ACTIVITY_WINDOW_MS) {
+      const activeWindowMs = session.needsAttention ? CLAUDE_HOOK_ACTIVE_WINDOW_MS : CLAUDE_ACTIVITY_WINDOW_MS;
+      if (seenMs && now - seenMs < activeWindowMs) {
         sessionCandidates.push({
           ...session,
           sessionKey,
@@ -1002,18 +1038,21 @@ class AgentMonitor {
       const id = taskIdForClaudeSession(session.sessionKey);
       visibleSessionTaskIds.add(id);
       const previous = this.lastStatuses.get(id);
+      const status = session.needsAttention ? 'hitl' : 'running';
       const task = this.store.upsertTask({
         id,
         label: `Claude: ${projectName(session.cwd, 'working')}`,
         source: 'agent',
-        command: `${shortenHome(session.cwd) || '~/.claude'} · ${session.lastType || 'active'}`,
-        status: 'running',
+        command: session.needsAttention
+          ? session.attentionText || 'Claude Code needs confirmation'
+          : `${shortenHome(session.cwd) || '~/.claude'} · ${session.lastType || 'active'}`,
+        status,
         startedAt: this.store.tasks.get(id)?.startedAt || session.lastAt || nowIso(),
         finishedAt: null,
         exitCode: null
       });
 
-      this.noteTransition(id, previous, 'running', task);
+      this.noteTransition(id, previous, status, task);
     }
 
     this.cleanupClaudeSessionTasks(visibleSessionTaskIds);
@@ -1050,7 +1089,8 @@ class AgentMonitor {
         ...(existing || {}),
         id,
         status: 'success',
-        finishedAt: nowIso()
+        finishedAt: nowIso(),
+        silent: previous === 'hitl'
       });
       this.lastStatuses.set(id, 'hidden');
       this.store.removeTask(id);

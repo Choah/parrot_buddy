@@ -27,7 +27,7 @@ const birdDefaultSize = { width: 92, height: 96 };
 const birdMinWidth = 54;
 const birdMaxWidth = 220;
 const birdAspectHeight = birdDefaultSize.height / birdDefaultSize.width;
-const windowFitMargin = 10;
+const windowFitMargin = 6;
 let windowFitTimer = null;
 let fittingWindow = false;
 let windowEditMode = false;
@@ -294,6 +294,8 @@ let birdClickCount = 0;
 let birdClickTimer = null;
 let pokeAnimationTimer = null;
 let alertAnimationTimer = null;
+let alertAnimationRunning = false;
+let queuedAlertAnimations = 0;
 let suppressNextParrotClick = false;
 let birdDrag = null;
 let birdResize = null;
@@ -312,12 +314,23 @@ function playPokeAnimation() {
 }
 
 function playAlertAnimation() {
-  clearTimeout(alertAnimationTimer);
+  if (alertAnimationRunning) {
+    queuedAlertAnimations += 1;
+    return;
+  }
+
+  alertAnimationRunning = true;
   parrot.classList.remove('alerting');
   void parrot.offsetWidth;
   parrot.classList.add('alerting');
+  clearTimeout(alertAnimationTimer);
   alertAnimationTimer = setTimeout(() => {
     parrot.classList.remove('alerting');
+    alertAnimationRunning = false;
+    if (queuedAlertAnimations > 0) {
+      queuedAlertAnimations -= 1;
+      alertAnimationTimer = setTimeout(playAlertAnimation, 160);
+    }
   }, 920);
 }
 
@@ -432,10 +445,10 @@ function captureContentRects() {
       key: 'bird',
       rect,
       fitRect: {
-        left: rect.left - 8,
-        top: rect.top - 8,
-        right: rect.right + 8,
-        bottom: rect.bottom + 8
+        left: rect.left - 4,
+        top: rect.top - 4,
+        right: rect.right + 4,
+        bottom: rect.bottom + 4
       }
     });
   }
@@ -501,8 +514,8 @@ async function fitWindowToContent({ persistCompact = true } = {}) {
       type: 'fit-to-content',
       ...bounds,
       margin: windowFitMargin,
-      minWidth: guidePanel && !guidePanel.hidden ? 360 : 128,
-      minHeight: guidePanel && !guidePanel.hidden ? 300 : 112,
+      minWidth: guidePanel && !guidePanel.hidden ? 360 : 92,
+      minHeight: guidePanel && !guidePanel.hidden ? 300 : 88,
       persistCompact
     });
 

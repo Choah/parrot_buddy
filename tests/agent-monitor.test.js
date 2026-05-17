@@ -63,6 +63,87 @@ test('parses Claude Code transcript activity generically', () => {
   assert.equal(event.cwd, '/tmp/project');
 });
 
+test('parses Claude Code assistant confirmation requests as HITL events', () => {
+  const event = parseClaudeLine(JSON.stringify({
+    type: 'assistant',
+    timestamp: '2026-05-15T08:31:00.000Z',
+    cwd: '/tmp/project',
+    message: {
+      content: [
+        { type: 'text', text: 'I need permission before editing. Should I proceed?' }
+      ]
+    }
+  }));
+
+  assert.equal(event.type, 'hitl');
+  assert.equal(event.cwd, '/tmp/project');
+  assert.match(event.command, /Should I proceed/);
+});
+
+test('does not treat generic assistant help questions as HITL', () => {
+  const codexCompleted = parseCodexEventLine(JSON.stringify({
+    timestamp: '2026-05-15T08:32:00.000Z',
+    type: 'event_msg',
+    payload: {
+      type: 'task_complete',
+      turn_id: 'turn-help',
+      completed_at: 1778833920,
+      last_agent_message: '안녕하세요. 무엇을 도와드리면 될까요?'
+    }
+  }));
+  const claudeAssistant = parseClaudeLine(JSON.stringify({
+    type: 'assistant',
+    timestamp: '2026-05-15T08:32:01.000Z',
+    cwd: '/tmp/project',
+    message: {
+      content: [
+        { type: 'text', text: '안녕하세요. 무엇을 도와드리면 될까요?' }
+      ]
+    }
+  }));
+
+  assert.equal(codexCompleted.status, 'success');
+  assert.equal(claudeAssistant.type, 'assistant');
+});
+
+test('does not treat approval workflow explanations as HITL', () => {
+  const message = [
+    'planner_agent.py 안에 PostgreSQL 저장을 추가할 필요는 없습니다.',
+    'plan_approval_gate가 approve / reject 값을 hitl.history에 넣고,',
+    'preflight 예시에서 guardrail_action = "proceed"로 고쳤습니다.',
+    'history_saver가 저장하는 방식이 더 안전합니다.'
+  ].join(' ');
+  const codexCompleted = parseCodexEventLine(JSON.stringify({
+    timestamp: '2026-05-15T08:33:00.000Z',
+    type: 'event_msg',
+    payload: {
+      type: 'task_complete',
+      turn_id: 'turn-explain-approval',
+      completed_at: 1778833980,
+      last_agent_message: message
+    }
+  }));
+  const claudeAssistant = parseClaudeLine(JSON.stringify({
+    type: 'assistant',
+    timestamp: '2026-05-15T08:33:01.000Z',
+    cwd: '/tmp/project',
+    message: { content: [{ type: 'text', text: message }] }
+  }));
+
+  assert.equal(codexCompleted.status, 'success');
+  assert.equal(claudeAssistant.type, 'assistant');
+  assert.equal(messageLooksHitl(message), false);
+  assert.equal(messageLooksHitl('guardrail_action = "proceed"'), false);
+  assert.equal(messageLooksHitl('Can I proceed?'), true);
+});
+
+test('keeps action-specific Korean confirmation questions as HITL', () => {
+  assert.equal(messageLooksHitl('이대로 커밋할까요?'), true);
+  assert.equal(messageLooksHitl('충돌 파일을 덮어써도 될까요?'), true);
+  assert.equal(messageLooksHitl('이 명령은 승인 필요 상태입니다.'), true);
+  assert.equal(messageLooksHitl('무엇을 도와드리면 될까요?'), false);
+});
+
 test('parses Codex approval requests as HITL events', () => {
   const event = parseCodexEventLine(JSON.stringify({
     timestamp: '2026-05-15T08:54:58.252Z',
@@ -384,6 +465,78 @@ test('keeps synthetic Codex cleanup silent', () => {
     status: 'stopped',
     silent: true
   });
+
+  assert.equal(finished.length, 0);
+});
+
+test('alerts per Claude Code session when user confirmation is needed', () => {
+  const store = new TaskStore();
+  const attention = [];
+  const monitor = new AgentMonitor({
+    store,
+    pollMs: 999999,
+    onAgentAttention: (task) => attention.push(task)
+  });
+
+  monitor.applyClaudeEvent({
+    type: 'hitl',
+    cwd: '/tmp/claude_project',
+    at: new Date().toISOString(),
+    command: 'Should I proceed?'
+  });
+  monitor.updateClaudeTask([]);
+
+  const task = store.snapshot().tasks.find((item) => item.id.startsWith('claude-session-'));
+  assert.equal(task.status, 'hitl');
+  assert.equal(task.command, 'Should I proceed?');
+  assert.equal(attention.length, 1);
+
+  monitor.updateClaudeTask([]);
+  assert.equal(attention.length, 1);
+});
+
+test('alerts when a Claude Code session finishes', () => {
+  const store = new TaskStore();
+  const finished = [];
+  const monitor = new AgentMonitor({
+    store,
+    pollMs: 999999,
+    onAgentFinished: (task) => finished.push(task)
+  });
+
+  monitor.applyClaudeEvent({
+    type: 'tool_use',
+    cwd: '/tmp/claude_project',
+    at: new Date().toISOString()
+  });
+  monitor.updateClaudeTask([]);
+
+  monitor.claudeSessions.clear();
+  monitor.updateClaudeTask([]);
+
+  assert.equal(finished.length, 1);
+  assert.match(finished[0].id, /^claude-session-/);
+});
+
+test('does not send a completion alert when an unresolved Claude confirmation expires', () => {
+  const store = new TaskStore();
+  const finished = [];
+  const monitor = new AgentMonitor({
+    store,
+    pollMs: 999999,
+    onAgentFinished: (task) => finished.push(task)
+  });
+
+  monitor.applyClaudeEvent({
+    type: 'hitl',
+    cwd: '/tmp/claude_project',
+    at: new Date().toISOString(),
+    command: 'Should I proceed?'
+  });
+  monitor.updateClaudeTask([]);
+
+  monitor.claudeSessions.clear();
+  monitor.updateClaudeTask([]);
 
   assert.equal(finished.length, 0);
 });
