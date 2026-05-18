@@ -152,8 +152,10 @@
           <h2>조이 Assistant</h2>
           <ul>
             <li>앵무새를 길게 누르면 열립니다.</li>
+            <li>guide와 같은 큰 패널 크기로 열리고, window size가 자동으로 맞춰집니다.</li>
             <li>중요한 일, 일정, 기억할 내용을 정리해 줍니다.</li>
             <li>헤더나 빈 영역을 드래그하면 조이 Assistant 창만 이동합니다.</li>
+            <li>아래 모서리 핸들 드래그: 조이 Assistant 크기 조절</li>
           </ul>
         </div>
 
@@ -255,6 +257,7 @@
       </aside>
 
       <aside class="assistant-panel" id="assistantPanel" aria-label="Parrot Buddy assistant" hidden>
+        <button class="assistant-resize-handle left" type="button" data-edge="left" aria-label="Resize Joy Assistant from left"></button>
         <div class="assistant-header">
           <div>
             <p class="eyebrow">Assistant</p>
@@ -270,6 +273,7 @@
           <textarea id="assistantInput" rows="3" placeholder="Enter로 보내기 · Shift+Enter 줄바꿈"></textarea>
           <button id="assistantSendButton" type="submit">Send</button>
         </form>
+        <button class="assistant-resize-handle right" type="button" data-edge="right" aria-label="Resize Joy Assistant from right"></button>
       </aside>
     </main>
 

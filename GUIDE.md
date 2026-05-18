@@ -71,8 +71,10 @@ Codex나 Claude Code를 쓰지 않는 사람은 `Agent Settings`에서 해당 �
 조이 Assistant:
 
 - 앵무새를 길게 누르면 열립니다.
+- guide와 같은 큰 패널 크기로 열리고, `window size`가 자동으로 맞춰집니다.
 - 중요한 일, 일정, 기억할 내용을 정리해 줍니다.
 - 헤더나 빈 영역을 드래그하면 조이 Assistant 창만 이동합니다.
+- 아래 모서리 핸들을 드래그하면 조이 Assistant 크기를 조절할 수 있습니다.
 
 Agent 상태:
 
@@ -90,7 +92,7 @@ Agent 상태:
 - Guide 제목 줄 드래그: Parrot Buddy 창 전체 이동
 - Esc: guide, 조이 Assistant, agent 설정, window size 모드 닫기
 
-평소에는 compact 창으로 표시됩니다. guide를 열 때만 창이 더 커지고, 닫으면 다시 작아집니다.
+평소에는 compact 창으로 표시됩니다. guide나 조이 Assistant를 열 때만 창이 더 커지고, 닫으면 다시 작아집니다.
 
 ## 5. 개인비서
 

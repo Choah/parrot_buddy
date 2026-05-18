@@ -33,11 +33,11 @@ const COMPACT_WINDOW_SIZE = {
   width: COMPACT_WINDOW_BOUNDS.width,
   height: COMPACT_WINDOW_BOUNDS.height
 };
-const GUIDE_WINDOW_SIZE = { width: 430, height: 520 };
+const EXPANDED_PANEL_WINDOW_SIZE = { width: 430, height: 520 };
 const MIN_WINDOW_SIZE = { width: 92, height: 88 };
 const MAX_TRAY_STATUS_ITEMS = 6;
 let compactWindowSize = { ...COMPACT_WINDOW_SIZE };
-let guideWindowOpen = false;
+let expandedPanelWindowOpen = false;
 
 if (process.platform === 'darwin') {
   app.dock.hide();
@@ -411,7 +411,7 @@ function pokeWindow(pointer) {
 }
 
 function setWindowSize({ width, height }) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false };
   const nextWidth = Math.round(Math.max(MIN_WINDOW_SIZE.width, Number(width) || COMPACT_WINDOW_SIZE.width));
   const nextHeight = Math.round(Math.max(MIN_WINDOW_SIZE.height, Number(height) || COMPACT_WINDOW_SIZE.height));
 
@@ -425,6 +425,7 @@ function setWindowSize({ width, height }) {
     width: nextWidth,
     height: nextHeight
   }, false);
+  return { ok: true, bounds: mainWindow.getBounds() };
 }
 
 function resizeWindowBy(delta = {}) {
@@ -533,7 +534,7 @@ function fitWindowToContent(frame = {}) {
   const nextBounds = { x, y, width, height };
 
   mainWindow.setBounds(nextBounds, false);
-  if (frame.persistCompact !== false && !guideWindowOpen) {
+  if (frame.persistCompact !== false && !expandedPanelWindowOpen) {
     compactWindowSize = { width, height };
   }
 
@@ -800,11 +801,11 @@ ipcMain.handle('window:action', (_event, action) => {
   if (actionType === 'pause-wander') stopWander();
   if (actionType === 'resume-wander') startWander();
   if (actionType === 'move-by') moveWindowBy(action);
-  if (actionType === 'resize-by') resizeWindowBy(action);
+  if (actionType === 'resize-by') return resizeWindowBy(action);
   if (actionType === 'fit-to-content') return fitWindowToContent(action);
-  if (actionType === 'guide-mode') {
-    guideWindowOpen = Boolean(action.open);
-    setWindowSize(guideWindowOpen ? GUIDE_WINDOW_SIZE : compactWindowSize);
+  if (actionType === 'guide-mode' || actionType === 'panel-mode') {
+    expandedPanelWindowOpen = Boolean(action.open);
+    return setWindowSize(expandedPanelWindowOpen ? EXPANDED_PANEL_WINDOW_SIZE : compactWindowSize);
   }
   if (actionType === 'poke') pokeWindow(action.pointer);
   if (actionType === 'hide') hideWindow();

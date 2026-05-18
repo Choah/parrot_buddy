@@ -472,8 +472,8 @@ body.window-editing .window-resize-handle {
   z-index: 4;
   display: none;
   width: max-content;
-  min-width: 58px;
-  max-width: min(236px, calc(100vw - 18px));
+  min-width: 74px;
+  max-width: min(340px, calc(100vw - 18px));
   padding: 7px 10px;
   border: 1px solid rgba(122, 82, 16, 0.16);
   border-radius: 14px 14px 14px 5px;
@@ -486,6 +486,10 @@ body.window-editing .window-resize-handle {
   white-space: normal;
   overflow-wrap: anywhere;
   pointer-events: none;
+}
+
+.bird-stage.thoughtful .bird-thinking {
+  min-width: 158px;
 }
 
 .bird-stage.bubble-left .bird-thinking {
@@ -834,6 +838,21 @@ body.window-editing .bird-resize-handle {
   backdrop-filter: blur(16px);
 }
 
+.assistant-panel {
+  left: 8px;
+  top: 55px;
+  width: min(414px, calc(100vw - 16px));
+  height: min(430px, calc(100vh - 84px));
+  max-height: none;
+  border-radius: 14px;
+}
+
+.assistant-panel.resizing {
+  box-shadow:
+    0 0 0 4px rgba(240, 138, 75, 0.12),
+    var(--panel-shadow);
+}
+
 .settings-panel {
   z-index: 35;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -899,6 +918,44 @@ body.window-editing .bird-resize-handle {
   overflow-y: auto;
   padding-right: 2px;
   scrollbar-gutter: stable;
+}
+
+.assistant-resize-handle {
+  position: absolute;
+  bottom: -7px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.assistant-resize-handle.left {
+  left: -7px;
+  cursor: nesw-resize;
+}
+
+.assistant-resize-handle.right {
+  right: -7px;
+}
+
+.assistant-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border: 1.5px solid rgba(90, 61, 17, 0.3);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 6px 14px rgba(74, 48, 14, 0.16);
+}
+
+.assistant-resize-handle:hover::before,
+.assistant-resize-handle:active::before {
+  border-color: rgba(240, 138, 75, 0.62);
+  background: #fff9e6;
 }
 
 .settings-agent {

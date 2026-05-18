@@ -119,7 +119,7 @@ curl http://127.0.0.1:17872/health
 
 ### 6. 개인비서 기능
 
-앵무새를 길게 누르면 개인비서 채팅창이 열립니다. 개인비서 이름은 `조이`이고, 겉으로는 차갑지만 알고 보면 따뜻하고 착한 츤데레 앵무새입니다. 오늘 한 일, 앞으로 할 일, 일정, 기억해야 할 내용을 자연스럽게 적으면 Codex CLI가 내용을 정리하고 Parrot Buddy가 로컬 파일에 저장합니다.
+앵무새를 길게 누르면 개인비서 채팅창이 열립니다. 조이 Assistant는 guide와 같은 큰 패널 크기로 열리고, `window size`가 자동으로 맞춰집니다. 아래 모서리 핸들을 드래그하면 조이 Assistant 크기를 직접 조절할 수 있습니다. 개인비서 이름은 `조이`이고, 겉으로는 차갑지만 알고 보면 따뜻하고 착한 츤데레 앵무새입니다. 오늘 한 일, 앞으로 할 일, 일정, 기억해야 할 내용을 자연스럽게 적으면 Codex CLI가 내용을 정리하고 Parrot Buddy가 로컬 파일에 저장합니다.
 
 앵무새를 한 번 클릭하면 조이가 주인님에 대해 떠올린 짧은 속생각을 보여줍니다. 이 속생각은 `memory.md`, 최근 history, 최근 assistant 세션을 참고해서 하루 단위로 30개 후보를 만듭니다. 앱이 켜질 때 자동으로 오늘 후보를 준비하고, 이후 주기적으로 날짜 변경과 메모리 변경을 확인해 갱신합니다. 클릭할 때마다 그중 하나를 랜덤으로 4초간 표시합니다.
 
@@ -367,7 +367,7 @@ When you move or resize the work status window, the white window area automatica
 
 ### 6. Personal Assistant
 
-Long-press the parrot to open the personal assistant chat. The assistant is named `Joy`: a cool-on-the-surface, secretly warm, kind tsundere parrot. Write today's notes, future tasks, schedule items, or reminders in natural language. Parrot Buddy calls your local logged-in Codex CLI, then stores the organized result in local files. Clicking the parrot shows one random Joy thought for four seconds. Joy thoughts are prepared automatically per day from local memory, recent history, and assistant sessions.
+Long-press the parrot to open the personal assistant chat. Joy Assistant opens at the same large panel size as the guide, and `window size` adjusts automatically. Drag the lower corner handles to resize Joy Assistant directly. The assistant is named `Joy`: a cool-on-the-surface, secretly warm, kind tsundere parrot. Write today's notes, future tasks, schedule items, or reminders in natural language. Parrot Buddy calls your local logged-in Codex CLI, then stores the organized result in local files. Clicking the parrot shows one random Joy thought for four seconds. Joy thoughts are prepared automatically per day from local memory, recent history, and assistant sessions.
 
 Simple greetings and obvious small talk are answered immediately in Joy's persona and are not saved. For other messages, Codex classifies the message as chat, recall, memory, schedule, task, or note in the same JSON response it uses to answer. Joy only saves reusable personal facts, preferences, plans, appointments, decisions, and follow-ups. If Codex marks a message as ordinary chat or recall, Parrot Buddy blocks history, memory, and reminder writes.
 

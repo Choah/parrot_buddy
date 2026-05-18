@@ -36,6 +36,7 @@ const assistantReminders = document.getElementById('assistantReminders');
 const assistantForm = document.getElementById('assistantForm');
 const assistantInput = document.getElementById('assistantInput');
 const assistantSendButton = document.getElementById('assistantSendButton');
+const assistantResizeHandles = document.querySelectorAll('.assistant-resize-handle');
 const speech = document.querySelector('.speech');
 const speechHideButton = document.getElementById('speechHideButton');
 const speechResizeHandle = document.getElementById('speechResizeHandle');
@@ -59,6 +60,9 @@ const assistantDragThreshold = 6;
 const assistantThinkingDelayMs = 280;
 const birdThoughtDurationMs = 4000;
 const statusBoxRevealClicks = 3;
+const expandedPanelWindowSize = { width: 430, height: 520 };
+const assistantMinSize = { width: 300, height: 300 };
+const assistantMaxSize = { width: 760, height: 720 };
 let windowFitTimer = null;
 let fittingWindow = false;
 let windowEditMode = false;
@@ -67,6 +71,7 @@ let windowFrameResize = null;
 let windowFrameResizeFrame = null;
 let speechHiddenBeforeAssistant = null;
 let assistantThinkingTimer = null;
+let assistantResize = null;
 let birdThoughtTimer = null;
 let birdBubbleMode = null;
 let currentSettingsSnapshot = null;
@@ -288,19 +293,24 @@ if (runForm && commandInput && runButton) {
   });
 }
 
-function openGuide() {
+async function openGuide() {
   if (!guidePanel.hidden) return;
   restoreWindowEditModeAfterGuide = windowEditMode;
   if (windowEditMode) setWindowEditMode(false);
   if (settingsPanel && !settingsPanel.hidden) closeSettings();
+  if (assistantPanel && !assistantPanel.hidden) closeAssistantChat();
+  try {
+    await window.buddy.windowAction({ type: 'panel-mode', open: true });
+  } catch {
+    // The guide can still open inside the current window if resizing is unavailable.
+  }
   guidePanel.hidden = false;
   requestAnimationFrame(clampFloatingLayout);
-  window.buddy.windowAction({ type: 'guide-mode', open: true });
 }
 
 function closeGuide() {
   guidePanel.hidden = true;
-  window.buddy.windowAction({ type: 'guide-mode', open: false });
+  window.buddy.windowAction({ type: 'panel-mode', open: false });
   const shouldRestoreWindowEditMode = restoreWindowEditModeAfterGuide;
   restoreWindowEditModeAfterGuide = false;
   if (shouldRestoreWindowEditMode && !windowEditMode) {
@@ -482,7 +492,14 @@ function placeBirdBubble() {
     birdRect.left > viewportWidth * 0.52 || spaceRight < 132
   );
   const shouldOpenBelow = birdRect.top < 58 && viewportHeight - birdRect.bottom > 58;
-  const maxWidth = Math.round(clamp(shouldOpenLeft ? spaceLeft : spaceRight, 96, 236));
+  const availableSideSpace = shouldOpenLeft ? spaceLeft : spaceRight;
+  const minBubbleWidth = birdBubbleMode === 'thought' ? 176 : 96;
+  const maxBubbleWidth = birdBubbleMode === 'thought' ? 340 : 236;
+  const maxWidth = Math.round(clamp(
+    Math.max(availableSideSpace, minBubbleWidth),
+    minBubbleWidth,
+    maxBubbleWidth
+  ));
 
   birdStage.classList.toggle('bubble-left', shouldOpenLeft);
   birdStage.classList.toggle('bubble-right', !shouldOpenLeft);
@@ -572,13 +589,18 @@ async function loadAssistantSnapshot() {
   renderAssistantReminders(snapshot);
 }
 
-function openAssistantChat() {
+async function openAssistantChat() {
   if (!assistantPanel) return;
   if (guidePanel && !guidePanel.hidden) closeGuide();
   if (settingsPanel && !settingsPanel.hidden) closeSettings();
   if (speech && speechHiddenBeforeAssistant === null) {
     speechHiddenBeforeAssistant = speech.hidden;
     if (!speech.hidden) setSpeechVisible(false, false);
+  }
+  try {
+    await window.buddy.windowAction({ type: 'panel-mode', open: true });
+  } catch {
+    // Keep the assistant usable even if the native window resize fails.
   }
   assistantPanel.hidden = false;
   loadAssistantSnapshot();
@@ -591,6 +613,7 @@ function openAssistantChat() {
 function closeAssistantChat() {
   if (!assistantPanel) return;
   assistantPanel.hidden = true;
+  window.buddy.windowAction({ type: 'panel-mode', open: false });
   if (speech && speechHiddenBeforeAssistant === false) {
     setSpeechVisible(true, false);
   }
@@ -849,8 +872,47 @@ function moveAssistantTo(left, top, { allowOverflow = false } = {}) {
 
   writeLayout({
     assistant: {
+      ...readLayout().assistant,
       left: parseFloat(assistantPanel.style.left),
       top: parseFloat(assistantPanel.style.top)
+    }
+  });
+}
+
+function resizeAssistantTo(width, height, left = null, { allowOverflow = false } = {}) {
+  if (!assistantPanel) return;
+
+  const rect = assistantPanel.getBoundingClientRect();
+  const minWidth = Math.min(assistantMinSize.width, Math.max(220, window.innerWidth - 16));
+  const minHeight = Math.min(assistantMinSize.height, Math.max(240, window.innerHeight - 16));
+  const nextLeft = Number.isFinite(left)
+    ? Math.round(allowOverflow
+      ? clamp(left, -assistantMaxSize.width, window.innerWidth - minWidth)
+      : clamp(left, 8, Math.max(8, window.innerWidth - minWidth - 8)))
+    : rect.left;
+  const maxWidth = allowOverflow
+    ? assistantMaxSize.width
+    : Math.max(minWidth, window.innerWidth - nextLeft - 8);
+  const maxHeight = allowOverflow
+    ? assistantMaxSize.height
+    : Math.max(minHeight, window.innerHeight - rect.top - 8);
+  const nextWidth = Math.round(clamp(width, minWidth, maxWidth));
+  const nextHeight = Math.round(clamp(height, minHeight, maxHeight));
+
+  if (Number.isFinite(left)) assistantPanel.style.left = `${nextLeft}px`;
+  assistantPanel.style.width = `${nextWidth}px`;
+  assistantPanel.style.height = `${nextHeight}px`;
+  assistantPanel.style.right = 'auto';
+  assistantPanel.style.bottom = 'auto';
+  assistantPanel.style.transform = 'none';
+
+  writeLayout({
+    assistant: {
+      ...readLayout().assistant,
+      left: parseFloat(assistantPanel.style.left),
+      top: parseFloat(assistantPanel.style.top),
+      width: nextWidth,
+      height: nextHeight
     }
   });
 }
@@ -1007,6 +1069,20 @@ async function fitWindowToContent({ persistCompact = true } = {}) {
   const rects = captureContentRects();
   const bounds = contentBoundsFrom(rects);
   if (!bounds) return;
+  const layoutAssistant = readLayout().assistant || {};
+  const assistantHasCustomSize = Number.isFinite(layoutAssistant.width) || Number.isFinite(layoutAssistant.height);
+  const guideLikePanelOpen = (guidePanel && !guidePanel.hidden) || (settingsPanel && !settingsPanel.hidden);
+  const assistantOpen = assistantPanel && !assistantPanel.hidden;
+  const minPanelWidth = guideLikePanelOpen || (assistantOpen && !assistantHasCustomSize)
+    ? expandedPanelWindowSize.width
+    : assistantOpen
+      ? assistantMinSize.width + windowFitMargin * 2
+      : 92;
+  const minPanelHeight = guideLikePanelOpen || (assistantOpen && !assistantHasCustomSize)
+    ? expandedPanelWindowSize.height
+    : assistantOpen
+      ? assistantMinSize.height + windowFitMargin * 2
+      : 88;
 
   fittingWindow = true;
   try {
@@ -1014,8 +1090,8 @@ async function fitWindowToContent({ persistCompact = true } = {}) {
       type: 'fit-to-content',
       ...bounds,
       margin: windowFitMargin,
-      minWidth: (guidePanel && !guidePanel.hidden) || (assistantPanel && !assistantPanel.hidden) || (settingsPanel && !settingsPanel.hidden) ? 360 : 92,
-      minHeight: (guidePanel && !guidePanel.hidden) || (assistantPanel && !assistantPanel.hidden) || (settingsPanel && !settingsPanel.hidden) ? 300 : 88,
+      minWidth: minPanelWidth,
+      minHeight: minPanelHeight,
       persistCompact
     });
 
@@ -1134,6 +1210,8 @@ function restoreFloatingLayout() {
   if (layout.assistant && assistantPanel) {
     if (Number.isFinite(layout.assistant.left)) assistantPanel.style.left = `${layout.assistant.left}px`;
     if (Number.isFinite(layout.assistant.top)) assistantPanel.style.top = `${layout.assistant.top}px`;
+    if (Number.isFinite(layout.assistant.width)) assistantPanel.style.width = `${layout.assistant.width}px`;
+    if (Number.isFinite(layout.assistant.height)) assistantPanel.style.height = `${layout.assistant.height}px`;
     if (Number.isFinite(layout.assistant.left) || Number.isFinite(layout.assistant.top)) {
       assistantPanel.style.right = 'auto';
       assistantPanel.style.bottom = 'auto';
@@ -1450,6 +1528,67 @@ if (speech) {
   speech.addEventListener('pointerup', stopWindowDrag);
   speech.addEventListener('pointercancel', stopWindowDrag);
 }
+
+function setupAssistantResizeHandle(handle) {
+  if (!handle || !assistantPanel) return;
+
+  handle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const rect = assistantPanel.getBoundingClientRect();
+    assistantResize = {
+      pointerId: event.pointerId,
+      edge: handle.dataset.edge,
+      startScreenX: event.screenX,
+      startScreenY: event.screenY,
+      startLeft: rect.left,
+      startWidth: rect.width,
+      startHeight: rect.height
+    };
+    handle.setPointerCapture(event.pointerId);
+    assistantPanel.classList.add('resizing');
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  handle.addEventListener('pointermove', (event) => {
+    if (!assistantResize || assistantResize.pointerId !== event.pointerId) return;
+    const dx = event.screenX - assistantResize.startScreenX;
+    const dy = event.screenY - assistantResize.startScreenY;
+
+    if (assistantResize.edge === 'left') {
+      const right = assistantResize.startLeft + assistantResize.startWidth;
+      const nextLeft = assistantResize.startLeft + dx;
+      resizeAssistantTo(
+        right - nextLeft,
+        assistantResize.startHeight + dy,
+        nextLeft,
+        { allowOverflow: true }
+      );
+    } else {
+      resizeAssistantTo(
+        assistantResize.startWidth + dx,
+        assistantResize.startHeight + dy,
+        null,
+        { allowOverflow: true }
+      );
+    }
+
+    scheduleWindowFit({ persistCompact: false });
+  });
+
+  const stopAssistantResize = (event) => {
+    if (!assistantResize || assistantResize.pointerId !== event.pointerId) return;
+    handle.releasePointerCapture(event.pointerId);
+    assistantPanel.classList.remove('resizing');
+    assistantResize = null;
+    scheduleWindowFit({ persistCompact: false });
+  };
+
+  handle.addEventListener('pointerup', stopAssistantResize);
+  handle.addEventListener('pointercancel', stopAssistantResize);
+}
+
+assistantResizeHandles.forEach(setupAssistantResizeHandle);
 
 if (assistantPanel) {
   assistantPanel.addEventListener('pointerdown', (event) => {
