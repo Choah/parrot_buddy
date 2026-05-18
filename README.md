@@ -505,6 +505,12 @@ The output is written to `dist/`, which is ignored by git.
 
 ---
 
+## License
+
+MIT License. See [LICENSE](./LICENSE).
+
+---
+
 ## Sound Attribution
 
 Completion chirp:
