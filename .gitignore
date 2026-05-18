@@ -19,3 +19,7 @@ thoughts/
 reminders.json
 settings.json
 inbox.md
+
+# Large demo assets — served via GitHub Releases instead
+assets/parrot-buddy-demo.mov
+assets/parrot-buddy-demo.gif
