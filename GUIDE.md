@@ -34,46 +34,61 @@ Finder의 Applications에서 `Parrot Buddy.app`을 열거나 Spotlight에서 `Pa
 - 메뉴바 아이콘 클릭: 현재 agent 상태가 들어 있는 메뉴 열기
 - `Show Bird`: 앵무새 보이기
 - `Hide Bird`: 앵무새 숨기기
+- `Agent Settings`: Codex/Claude Code 감시 연결 설정
 - `Restart Agent Monitor`: Codex/Claude 감시 재시작
 - `Quit`: 완전 종료
 
 Codex 또는 Claude Code가 작업 중이거나 확인을 기다리는 동안에는 메뉴바 아이콘이 좌우로 흔들립니다. 대기 상태로 돌아오면 정적 아이콘으로 돌아갑니다.
+Codex나 Claude Code를 쓰지 않는 사람은 `Agent Settings`에서 해당 감시를 끌 수 있습니다. 설정은 `~/.parrot-buddy/settings.json`에 저장되고, 저장하면 모니터가 즉시 재시작됩니다.
 소리와 앵무새 또잉 알림은 **각 터미널/세션에서 사용자 확인이 필요할 때** 또는 **그 터미널/세션의 top-level 작업이 끝났을 때** 납니다. **작업 완료는 짹짹 2번**, **사용자 확인 필요는 짹 1번**입니다. 다른 독립 작업이 켜져 있어도 해당 작업 완료는 따로 알리고, 서브에이전트 하나가 먼저 끝나는 경우에는 알림 없이 상태만 바뀝니다.
 
 ## 4. 화면 조작
 
-기본 원칙:
+핵심:
 
 - 흰색 `window size` 외곽선은 **실제 Parrot Buddy 창 크기**입니다.
 - 이 영역이 커지면 투명해 보여도 뒤에 켜져 있는 앱이나 창 클릭을 막을 수 있습니다.
-- 평소에는 앵무새, 상태 박스, 조이 창을 감싸는 **최소 크기**로 두는 것이 좋습니다.
-- `window size`와 `guide` 탭은 외곽선 **아래쪽**에 표시됩니다.
-- 기본 compact 창은 현재 기준 배치로 시작합니다. 앵무새는 작게 왼쪽에 있고, 상태 박스는 오른쪽에 붙어 있습니다.
-- 위치와 크기를 바꾸면 앱이 로컬에 저장하지만, 새 설치자는 이 기본 배치로 시작합니다.
+- 평소에는 앵무새와 작업 상태 창을 감싸는 **최소 크기**로 두는 것이 좋습니다.
+- `guide` 탭은 외곽선 아래쪽 왼쪽에 있고, `window size` 표시는 그 오른쪽에 있습니다.
+- Guide 오른쪽 위 `agent` 버튼 또는 메뉴바 `Agent Settings`에서 Codex/Claude Code 감시를 설정합니다.
 
 앵무새:
 
 - 앵무새 드래그: Parrot Buddy 창 전체 이동
-- 앵무새 클릭: 또잉 애니메이션과 함께 조이의 짧은 속생각을 4초간 표시
+- 앵무새 클릭: 조이의 짧은 말풍선 표시
 - 앵무새 길게 누르기: 조이 Assistant 채팅 열기
-- 앵무새 빠르게 3번 클릭: guide 열기/닫기
+- 작업 상태 창을 숨긴 뒤 앵무새 빠르게 3번 클릭: 작업 상태 창 다시 표시
 - 앵무새 우클릭 또는 Option + 앵무새 클릭: 흰색 `window size` 외곽선 숨기기/다시 표시
 - `window size`가 보일 때 앵무새 오른쪽 아래 작은 손잡이 드래그: 앵무새 크기 조절
 
-상태 박스와 조이 창:
+작업 상태 창:
 
-- 상태 박스 드래그: 상태 박스만 이동
-- 상태 박스 왼쪽/오른쪽 아래 핸들: 상태 박스 크기 조정
-- 상태 박스 오른쪽 위 `×`: 상태 박스 숨기기
-- 상태 박스가 숨겨진 상태에서 앵무새 클릭: 상태 박스 다시 표시
-- 조이 Assistant 창의 헤더나 빈 영역 드래그: Assistant 창만 이동
+- Codex와 Claude Code가 작업 중인지, 확인을 기다리는지 보여줍니다.
+- 작업 상태 창 드래그: 창만 이동
+- 아래 핸들: 작업 상태 창 크기 조정
+- 오른쪽 위 `×`: 작업 상태 창 숨기기
+
+조이 Assistant:
+
+- 앵무새를 길게 누르면 열립니다.
+- 중요한 일, 일정, 기억할 내용을 정리해 줍니다.
+- 헤더나 빈 영역을 드래그하면 조이 Assistant 창만 이동합니다.
+
+Agent 상태:
+
+- `working`: 작업 중
+- `confirm`: 사용자 확인 필요
+- `ready`: 켜져 있고 대기 중
+- `stopped`: 감지된 프로세스 없음
+- 작업 완료는 짹짹 2번, 확인 필요는 짹 1번으로 알립니다.
+
+크기와 위치:
+
+- 작업 상태 창이나 조이 Assistant를 옮기면 `window size`가 내용에 맞춰 자동 조정됩니다.
+- 외곽선 가장자리나 모서리 드래그: 투명 창 크기 수동 조절
+- 말풍선은 앵무새 위치에 따라 왼쪽/오른쪽으로 자동 배치됩니다.
 - Guide 제목 줄 드래그: Parrot Buddy 창 전체 이동
-
-창 크기:
-
-- 상태 박스나 Assistant 창을 옮기면 흰색 창 영역이 내용에 맞춰 자동으로 줄거나 늘어납니다.
-- 외곽선 모서리 드래그: 실제 투명 창 크기 수동 조정
-- Esc: guide 또는 창 크기 조정 모드 닫기
+- Esc: guide, 조이 Assistant, agent 설정, window size 모드 닫기
 
 평소에는 compact 창으로 표시됩니다. guide를 열 때만 창이 더 커지고, 닫으면 다시 작아집니다.
 
@@ -85,7 +100,7 @@ Codex 또는 Claude Code가 작업 중이거나 확인을 기다리는 동안에
 
 명확한 인사나 짧은 잡담은 조이 말투로 즉시 답하고 저장하지 않습니다. 그 외 메시지는 Codex가 답변 JSON 안에서 chat, recall, memory, schedule, task, note로 분류합니다. 취향, 반복되는 정보, 일정, 약속, 결정, 나중에 챙길 일처럼 다시 쓸 가능성이 있는 것만 저장하고, chat이나 recall로 분류된 메시지는 history, memory, reminder 저장을 막습니다.
 
-조이 Assistant 창의 헤더나 빈 패널 영역을 잡고 움직이면 상태 박스처럼 Assistant 창만 따로 움직입니다. 실제 floating window 전체를 옮기려면 앵무새를 드래그하세요. 입력창, Send 버튼, 메시지 스크롤, reminder 버튼은 그대로 클릭/스크롤할 수 있습니다.
+조이 Assistant 창의 헤더나 빈 패널 영역을 잡고 움직이면 Assistant 창만 따로 움직입니다. 실제 floating window 전체를 옮기려면 앵무새를 드래그하세요. 입력창, Send 버튼, 메시지 스크롤, reminder 버튼은 그대로 클릭/스크롤할 수 있습니다.
 
 이 기능은 `.env` API 키를 쓰지 않습니다. 사용자의 Mac에 설치되어 로그인된 `codex` CLI를 사용합니다.
 
@@ -129,6 +144,8 @@ Claude Code:
 ~/.claude/transcripts/**/*.jsonl
 Claude Code processes / IDE locks
 ```
+
+다른 설치 경로를 쓰는 경우 `Agent Settings`에서 Codex sessions root, Claude projects/transcripts/lock 경로를 바꾸면 됩니다.
 
 ## 8. 개발 명령
 

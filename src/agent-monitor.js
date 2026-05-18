@@ -500,6 +500,7 @@ class AgentMonitor {
   constructor({
     store,
     pollMs = DEFAULT_POLL_MS,
+    enabledAgents = {},
     codexSessionsRoot = path.join(homeDir, '.codex', 'sessions'),
     claudeProjectsRoot = path.join(homeDir, '.claude', 'projects'),
     claudeTranscriptsRoot = path.join(homeDir, '.claude', 'transcripts'),
@@ -510,6 +511,10 @@ class AgentMonitor {
   }) {
     this.store = store;
     this.pollMs = pollMs;
+    this.enabledAgents = {
+      codex: enabledAgents.codex !== false,
+      claude: enabledAgents.claude !== false
+    };
     this.codexSessionsRoot = codexSessionsRoot;
     this.claudeProjectsRoot = claudeProjectsRoot;
     this.claudeTranscriptsRoot = claudeTranscriptsRoot;
@@ -553,15 +558,19 @@ class AgentMonitor {
   }
 
   bootstrap() {
-    for (const file of collectFiles(this.codexSessionsRoot, '.jsonl')
-      .sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-      this.readWholeFile(file, parseCodexEventLine, (event) => this.applyCodexEvent(event));
+    if (this.enabledAgents.codex) {
+      for (const file of collectFiles(this.codexSessionsRoot, '.jsonl')
+        .sort((a, b) => a.mtimeMs - b.mtimeMs)) {
+        this.readWholeFile(file, parseCodexEventLine, (event) => this.applyCodexEvent(event));
+      }
     }
 
-    for (const root of [this.claudeProjectsRoot, this.claudeTranscriptsRoot]) {
-      for (const file of collectFiles(root, '.jsonl')
-        .sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-        this.readWholeFile(file, parseClaudeLine, (event) => this.applyClaudeEvent(event));
+    if (this.enabledAgents.claude) {
+      for (const root of [this.claudeProjectsRoot, this.claudeTranscriptsRoot]) {
+        for (const file of collectFiles(root, '.jsonl')
+          .sort((a, b) => a.mtimeMs - b.mtimeMs)) {
+          this.readWholeFile(file, parseClaudeLine, (event) => this.applyClaudeEvent(event));
+        }
       }
     }
 
@@ -595,15 +604,19 @@ class AgentMonitor {
   }
 
   poll() {
-    for (const file of collectFiles(this.codexSessionsRoot, '.jsonl')
-      .sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-      this.readNewLines(file, parseCodexEventLine, (event) => this.applyCodexEvent(event));
+    if (this.enabledAgents.codex) {
+      for (const file of collectFiles(this.codexSessionsRoot, '.jsonl')
+        .sort((a, b) => a.mtimeMs - b.mtimeMs)) {
+        this.readNewLines(file, parseCodexEventLine, (event) => this.applyCodexEvent(event));
+      }
     }
 
-    for (const root of [this.claudeProjectsRoot, this.claudeTranscriptsRoot]) {
-      for (const file of collectFiles(root, '.jsonl')
-        .sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-        this.readNewLines(file, parseClaudeLine, (event) => this.applyClaudeEvent(event));
+    if (this.enabledAgents.claude) {
+      for (const root of [this.claudeProjectsRoot, this.claudeTranscriptsRoot]) {
+        for (const file of collectFiles(root, '.jsonl')
+          .sort((a, b) => a.mtimeMs - b.mtimeMs)) {
+          this.readNewLines(file, parseClaudeLine, (event) => this.applyClaudeEvent(event));
+        }
       }
     }
 
@@ -771,10 +784,35 @@ class AgentMonitor {
     });
   }
 
-  updateAgentTasks() {
-    const processes = listProcesses();
-    this.updateCodexTask(processes);
-    this.updateClaudeTask(processes);
+  updateAgentTasks(processes = listProcesses()) {
+    if (this.enabledAgents.codex) this.updateCodexTask(processes);
+    else this.clearCodexTasks();
+
+    if (this.enabledAgents.claude) this.updateClaudeTask(processes);
+    else this.clearClaudeTasks();
+  }
+
+  clearCodexTasks() {
+    for (const id of Array.from(this.store.tasks.keys())) {
+      if (id === 'agent-codex-ready' || id.startsWith('codex-turn-') || id.startsWith('codex-process-')) {
+        this.lastStatuses.set(id, 'hidden');
+        this.store.removeTask(id);
+      }
+    }
+
+    this.codexProcessTaskIds.clear();
+  }
+
+  clearClaudeTasks() {
+    for (const id of Array.from(this.store.tasks.keys())) {
+      if (id === 'agent-claude' || id.startsWith('claude-session-') || id.startsWith('claude-process-')) {
+        this.lastStatuses.set(id, 'hidden');
+        this.store.removeTask(id);
+      }
+    }
+
+    this.claudeSessionTaskIds.clear();
+    this.claudeProcessTaskIds.clear();
   }
 
   updateCodexTask(processes) {

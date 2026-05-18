@@ -10,6 +10,24 @@ const taskCount = document.getElementById('taskCount');
 const guideButton = document.getElementById('guideButton');
 const guidePanel = document.getElementById('guidePanel');
 const guideCloseButton = document.getElementById('guideCloseButton');
+const settingsButton = document.getElementById('settingsButton');
+const settingsPanel = document.getElementById('settingsPanel');
+const settingsCloseButton = document.getElementById('settingsCloseButton');
+const settingsForm = document.getElementById('settingsForm');
+const settingsResetButton = document.getElementById('settingsResetButton');
+const settingsSaveButton = document.getElementById('settingsSaveButton');
+const settingsSaveStatus = document.getElementById('settingsSaveStatus');
+const codexEnabled = document.getElementById('codexEnabled');
+const codexCommand = document.getElementById('codexCommand');
+const codexSessionsRoot = document.getElementById('codexSessionsRoot');
+const codexStatus = document.getElementById('codexStatus');
+const claudeEnabled = document.getElementById('claudeEnabled');
+const claudeCommand = document.getElementById('claudeCommand');
+const claudeProjectsRoot = document.getElementById('claudeProjectsRoot');
+const claudeTranscriptsRoot = document.getElementById('claudeTranscriptsRoot');
+const claudeIdeLockRoot = document.getElementById('claudeIdeLockRoot');
+const claudePeonStatePath = document.getElementById('claudePeonStatePath');
+const claudeStatus = document.getElementById('claudeStatus');
 const closeButton = document.getElementById('closeButton');
 const assistantPanel = document.getElementById('assistantPanel');
 const assistantCloseButton = document.getElementById('assistantCloseButton');
@@ -40,14 +58,18 @@ const assistantLongPressMs = 620;
 const assistantDragThreshold = 6;
 const assistantThinkingDelayMs = 280;
 const birdThoughtDurationMs = 4000;
+const statusBoxRevealClicks = 3;
 let windowFitTimer = null;
 let fittingWindow = false;
 let windowEditMode = false;
+let restoreWindowEditModeAfterGuide = false;
 let windowFrameResize = null;
+let windowFrameResizeFrame = null;
 let speechHiddenBeforeAssistant = null;
 let assistantThinkingTimer = null;
 let birdThoughtTimer = null;
 let birdBubbleMode = null;
+let currentSettingsSnapshot = null;
 
 function readLayout() {
   try {
@@ -87,7 +109,7 @@ function statusText(snapshot) {
   const stopped = agents.filter((task) => task.status === 'stopped');
   if (stopped.length > 0) return 'Agents stopped';
 
-  return 'Watching agents';
+  return enabledAgentLabels().length > 0 ? 'Watching agents' : 'Agent monitoring off';
 }
 
 function agentName(task) {
@@ -145,7 +167,8 @@ function renderStatusItems(snapshot) {
     const item = document.createElement('li');
     const label = document.createElement('span');
     label.className = 'agent-line';
-    label.textContent = 'Codex / Claude Code waiting';
+    const enabled = enabledAgentLabels();
+    label.textContent = enabled.length > 0 ? `${enabled.join(' / ')} waiting` : 'No agent monitoring enabled';
     item.title = label.textContent;
     item.append(label);
     statusHint.append(item);
@@ -226,7 +249,8 @@ function render(snapshot) {
   if (agentTasks.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.textContent = 'Waiting for Codex or Claude Code.';
+    const enabled = enabledAgentLabels();
+    empty.textContent = enabled.length > 0 ? `Waiting for ${enabled.join(' / ')}.` : 'No agent monitoring enabled.';
     taskList.append(empty);
     return;
   }
@@ -264,14 +288,11 @@ if (runForm && commandInput && runButton) {
   });
 }
 
-function toggleGuide() {
-  guidePanel.hidden = !guidePanel.hidden;
-  if (!guidePanel.hidden) requestAnimationFrame(clampFloatingLayout);
-  window.buddy.windowAction({ type: 'guide-mode', open: !guidePanel.hidden });
-}
-
 function openGuide() {
   if (!guidePanel.hidden) return;
+  restoreWindowEditModeAfterGuide = windowEditMode;
+  if (windowEditMode) setWindowEditMode(false);
+  if (settingsPanel && !settingsPanel.hidden) closeSettings();
   guidePanel.hidden = false;
   requestAnimationFrame(clampFloatingLayout);
   window.buddy.windowAction({ type: 'guide-mode', open: true });
@@ -280,6 +301,133 @@ function openGuide() {
 function closeGuide() {
   guidePanel.hidden = true;
   window.buddy.windowAction({ type: 'guide-mode', open: false });
+  const shouldRestoreWindowEditMode = restoreWindowEditModeAfterGuide;
+  restoreWindowEditModeAfterGuide = false;
+  if (shouldRestoreWindowEditMode && !windowEditMode) {
+    setWindowEditMode(true);
+  }
+}
+
+function statusLine(connection) {
+  if (!connection) return '';
+  const command = connection.commandPath ? `cmd ok: ${connection.commandPath}` : `cmd missing: ${connection.command}`;
+  const paths = (connection.paths || []).map((item) => (
+    `${item.exists ? 'ok' : 'missing'} ${item.label}`
+  )).join(' · ');
+  return [command, paths].filter(Boolean).join(' · ');
+}
+
+function renderSettings(snapshot) {
+  currentSettingsSnapshot = snapshot || null;
+  const settings = snapshot?.settings || {};
+  const agents = settings.agents || {};
+  const codex = agents.codex || {};
+  const claude = agents.claude || {};
+
+  if (codexEnabled) codexEnabled.checked = codex.enabled !== false;
+  if (codexCommand) codexCommand.value = codex.command || 'codex';
+  if (codexSessionsRoot) codexSessionsRoot.value = codex.sessionsRoot || '~/.codex/sessions';
+
+  if (claudeEnabled) claudeEnabled.checked = claude.enabled !== false;
+  if (claudeCommand) claudeCommand.value = claude.command || 'claude';
+  if (claudeProjectsRoot) claudeProjectsRoot.value = claude.projectsRoot || '~/.claude/projects';
+  if (claudeTranscriptsRoot) claudeTranscriptsRoot.value = claude.transcriptsRoot || '~/.claude/transcripts';
+  if (claudeIdeLockRoot) claudeIdeLockRoot.value = claude.ideLockRoot || '~/.claude/ide';
+  if (claudePeonStatePath) claudePeonStatePath.value = claude.peonStatePath || '~/.claude/hooks/peon-ping/.state.json';
+
+  const connections = snapshot?.connections || [];
+  if (codexStatus) codexStatus.textContent = statusLine(connections.find((item) => item.id === 'codex'));
+  if (claudeStatus) claudeStatus.textContent = statusLine(connections.find((item) => item.id === 'claude'));
+}
+
+function enabledAgentLabels() {
+  const agents = currentSettingsSnapshot?.settings?.agents || {};
+  const labels = [];
+  if (agents.codex?.enabled !== false) labels.push('Codex');
+  if (agents.claude?.enabled !== false) labels.push('Claude Code');
+  return labels;
+}
+
+async function loadSettingsSnapshot() {
+  if (!window.buddy.settingsSnapshot) return;
+  const snapshot = await window.buddy.settingsSnapshot();
+  renderSettings(snapshot);
+}
+
+function settingsPayloadFromForm() {
+  return {
+    agents: {
+      codex: {
+        enabled: Boolean(codexEnabled?.checked),
+        command: codexCommand?.value || 'codex',
+        sessionsRoot: codexSessionsRoot?.value || '~/.codex/sessions'
+      },
+      claude: {
+        enabled: Boolean(claudeEnabled?.checked),
+        command: claudeCommand?.value || 'claude',
+        projectsRoot: claudeProjectsRoot?.value || '~/.claude/projects',
+        transcriptsRoot: claudeTranscriptsRoot?.value || '~/.claude/transcripts',
+        ideLockRoot: claudeIdeLockRoot?.value || '~/.claude/ide',
+        peonStatePath: claudePeonStatePath?.value || '~/.claude/hooks/peon-ping/.state.json'
+      }
+    }
+  };
+}
+
+function openSettings(snapshot = null) {
+  if (!settingsPanel) return;
+  if (guidePanel && !guidePanel.hidden) closeGuide();
+  if (assistantPanel && !assistantPanel.hidden) closeAssistantChat();
+  settingsPanel.hidden = false;
+  if (snapshot) renderSettings(snapshot);
+  else loadSettingsSnapshot();
+  requestAnimationFrame(() => {
+    fitWindowToContent({ persistCompact: false });
+  });
+}
+
+function closeSettings() {
+  if (!settingsPanel) return;
+  settingsPanel.hidden = true;
+  scheduleWindowFit({ persistCompact: false });
+}
+
+function renderSaveStatus(text, mode = '') {
+  if (!settingsSaveStatus) return;
+  settingsSaveStatus.textContent = text;
+  settingsSaveStatus.dataset.mode = mode;
+}
+
+async function saveSettings() {
+  if (!window.buddy.settingsSave) return;
+  if (settingsSaveButton) settingsSaveButton.disabled = true;
+  renderSaveStatus('Saving...');
+  try {
+    const snapshot = await window.buddy.settingsSave(settingsPayloadFromForm());
+    renderSettings(snapshot);
+    renderSaveStatus('Saved. Agent monitor restarted.', 'success');
+  } catch (error) {
+    renderSaveStatus(error.message || 'Could not save settings.', 'error');
+  } finally {
+    if (settingsSaveButton) settingsSaveButton.disabled = false;
+    scheduleWindowFit({ persistCompact: false });
+  }
+}
+
+async function resetSettings() {
+  if (!window.buddy.settingsReset) return;
+  if (settingsResetButton) settingsResetButton.disabled = true;
+  renderSaveStatus('Resetting...');
+  try {
+    const snapshot = await window.buddy.settingsReset();
+    renderSettings(snapshot);
+    renderSaveStatus('Reset. Agent monitor restarted.', 'success');
+  } catch (error) {
+    renderSaveStatus(error.message || 'Could not reset settings.', 'error');
+  } finally {
+    if (settingsResetButton) settingsResetButton.disabled = false;
+    scheduleWindowFit({ persistCompact: false });
+  }
 }
 
 function appendAssistantMessage(role, text, meta = '') {
@@ -308,6 +456,7 @@ function renderBirdBubble(text, mode) {
   birdStage.classList.toggle('thinking', mode === 'thinking');
   birdStage.classList.toggle('thoughtful', mode === 'thought');
   birdThinking.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(placeBirdBubble);
   scheduleWindowFit({ persistCompact: false });
 }
 
@@ -315,9 +464,30 @@ function hideBirdBubble(mode = null) {
   if (!birdStage || !birdThinking) return;
   if (mode && birdBubbleMode !== mode) return;
   birdBubbleMode = null;
-  birdStage.classList.remove('thinking', 'thoughtful');
+  birdStage.classList.remove('thinking', 'thoughtful', 'bubble-left', 'bubble-right', 'bubble-below');
   birdThinking.setAttribute('aria-hidden', 'true');
+  birdThinking.style.removeProperty('max-width');
   scheduleWindowFit({ persistCompact: false });
+}
+
+function placeBirdBubble() {
+  if (!birdStage || !birdThinking || !parrot || !birdBubbleMode) return;
+
+  const birdRect = parrot.getBoundingClientRect();
+  const viewportWidth = Math.max(1, window.innerWidth);
+  const viewportHeight = Math.max(1, window.innerHeight);
+  const spaceLeft = Math.max(0, birdRect.right - 12);
+  const spaceRight = Math.max(0, viewportWidth - birdRect.left - 12);
+  const shouldOpenLeft = spaceLeft > 132 && (
+    birdRect.left > viewportWidth * 0.52 || spaceRight < 132
+  );
+  const shouldOpenBelow = birdRect.top < 58 && viewportHeight - birdRect.bottom > 58;
+  const maxWidth = Math.round(clamp(shouldOpenLeft ? spaceLeft : spaceRight, 96, 236));
+
+  birdStage.classList.toggle('bubble-left', shouldOpenLeft);
+  birdStage.classList.toggle('bubble-right', !shouldOpenLeft);
+  birdStage.classList.toggle('bubble-below', shouldOpenBelow);
+  birdThinking.style.maxWidth = `${maxWidth}px`;
 }
 
 function setAssistantThinking(visible) {
@@ -405,6 +575,7 @@ async function loadAssistantSnapshot() {
 function openAssistantChat() {
   if (!assistantPanel) return;
   if (guidePanel && !guidePanel.hidden) closeGuide();
+  if (settingsPanel && !settingsPanel.hidden) closeSettings();
   if (speech && speechHiddenBeforeAssistant === null) {
     speechHiddenBeforeAssistant = speech.hidden;
     if (!speech.hidden) setSpeechVisible(false, false);
@@ -489,6 +660,29 @@ if (guideCloseButton) {
   guideCloseButton.addEventListener('click', closeGuide);
 }
 
+if (settingsButton) {
+  settingsButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openSettings();
+  });
+}
+
+if (settingsCloseButton) {
+  settingsCloseButton.addEventListener('click', closeSettings);
+}
+
+if (settingsForm) {
+  settingsForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    saveSettings();
+  });
+}
+
+if (settingsResetButton) {
+  settingsResetButton.addEventListener('click', resetSettings);
+}
+
 if (assistantCloseButton) {
   assistantCloseButton.addEventListener('click', closeAssistantChat);
 }
@@ -519,6 +713,10 @@ document.addEventListener('keydown', (event) => {
     closeAssistantChat();
     return;
   }
+  if (settingsPanel && !settingsPanel.hidden) {
+    closeSettings();
+    return;
+  }
   if (!guidePanel.hidden) closeGuide();
 });
 
@@ -534,6 +732,7 @@ let birdResize = null;
 let assistantLongPressTimer = null;
 let assistantLongPressFired = false;
 let guideDrag = null;
+let settingsDrag = null;
 let assistantDrag = null;
 let speechDrag = null;
 let speechResize = null;
@@ -590,6 +789,27 @@ function moveGuideTo(left, top) {
     guide: {
       left: parseFloat(guidePanel.style.left),
       top: parseFloat(guidePanel.style.top)
+    }
+  });
+}
+
+function moveSettingsTo(left, top, { allowOverflow = false } = {}) {
+  if (!settingsPanel) return;
+
+  if (allowOverflow) {
+    settingsPanel.style.left = `${Math.round(left)}px`;
+    settingsPanel.style.top = `${Math.round(top)}px`;
+    settingsPanel.style.right = 'auto';
+    settingsPanel.style.bottom = 'auto';
+    settingsPanel.style.transform = 'none';
+  } else {
+    moveFloatingElementTo(settingsPanel, left, top, { margin: 8 });
+  }
+
+  writeLayout({
+    settings: {
+      left: parseFloat(settingsPanel.style.left),
+      top: parseFloat(settingsPanel.style.top)
     }
   });
 }
@@ -653,6 +873,7 @@ function setBirdSize(width, { persist = true } = {}) {
     });
   }
 
+  placeBirdBubble();
   return { width: nextWidth, height: nextHeight };
 }
 
@@ -686,6 +907,7 @@ function moveBirdTo(left, top, { clampToWindow = true } = {}) {
       top: parseFloat(birdStage.style.top)
     }
   });
+  placeBirdBubble();
 }
 
 function captureContentRects() {
@@ -715,6 +937,10 @@ function captureContentRects() {
 
   if (guidePanel && !guidePanel.hidden) {
     rects.push({ key: 'guide', rect: guidePanel.getBoundingClientRect() });
+  }
+
+  if (settingsPanel && !settingsPanel.hidden) {
+    rects.push({ key: 'settings', rect: settingsPanel.getBoundingClientRect() });
   }
 
   if (assistantPanel && !assistantPanel.hidden) {
@@ -759,6 +985,11 @@ function shiftContentAfterWindowFit(rects, dx, dy) {
     moveGuideTo(guideRect.left - dx, guideRect.top - dy);
   }
 
+  const settingsRect = rectForKey(rects, 'settings');
+  if (settingsRect && settingsPanel && !settingsPanel.hidden) {
+    moveSettingsTo(settingsRect.left - dx, settingsRect.top - dy, { allowOverflow: false });
+  }
+
   const assistantRect = rectForKey(rects, 'assistant');
   if (assistantRect && assistantPanel && !assistantPanel.hidden) {
     moveAssistantTo(assistantRect.left - dx, assistantRect.top - dy, { allowOverflow: false });
@@ -783,8 +1014,8 @@ async function fitWindowToContent({ persistCompact = true } = {}) {
       type: 'fit-to-content',
       ...bounds,
       margin: windowFitMargin,
-      minWidth: (guidePanel && !guidePanel.hidden) || (assistantPanel && !assistantPanel.hidden) ? 360 : 92,
-      minHeight: (guidePanel && !guidePanel.hidden) || (assistantPanel && !assistantPanel.hidden) ? 300 : 88,
+      minWidth: (guidePanel && !guidePanel.hidden) || (assistantPanel && !assistantPanel.hidden) || (settingsPanel && !settingsPanel.hidden) ? 360 : 92,
+      minHeight: (guidePanel && !guidePanel.hidden) || (assistantPanel && !assistantPanel.hidden) || (settingsPanel && !settingsPanel.hidden) ? 300 : 88,
       persistCompact
     });
 
@@ -909,6 +1140,16 @@ function restoreFloatingLayout() {
       assistantPanel.style.transform = 'none';
     }
   }
+
+  if (layout.settings && settingsPanel) {
+    if (Number.isFinite(layout.settings.left)) settingsPanel.style.left = `${layout.settings.left}px`;
+    if (Number.isFinite(layout.settings.top)) settingsPanel.style.top = `${layout.settings.top}px`;
+    if (Number.isFinite(layout.settings.left) || Number.isFinite(layout.settings.top)) {
+      settingsPanel.style.right = 'auto';
+      settingsPanel.style.bottom = 'auto';
+      settingsPanel.style.transform = 'none';
+    }
+  }
 }
 
 function clampFloatingLayout() {
@@ -922,6 +1163,11 @@ function clampFloatingLayout() {
   if (guidePanel && !guidePanel.hidden) {
     const rect = guidePanel.getBoundingClientRect();
     moveGuideTo(rect.left, rect.top);
+  }
+
+  if (settingsPanel && !settingsPanel.hidden) {
+    const rect = settingsPanel.getBoundingClientRect();
+    moveSettingsTo(rect.left, rect.top);
   }
 
   if (assistantPanel && !assistantPanel.hidden) {
@@ -1034,14 +1280,61 @@ setupSpeechResizeHandle(speechResizeLeftHandle, 'left');
 function setupWindowResizeHandle(handle) {
   if (!handle) return;
 
+  function flushWindowResize() {
+    windowFrameResizeFrame = null;
+    if (!windowFrameResize) return;
+    if (windowFrameResize.inFlight) {
+      return;
+    }
+
+    const dx = Math.round(windowFrameResize.pendingDx);
+    const dy = Math.round(windowFrameResize.pendingDy);
+    windowFrameResize.pendingDx -= dx;
+    windowFrameResize.pendingDy -= dy;
+    if (!dx && !dy) return;
+
+    const rects = captureContentRects();
+    const resizeSession = windowFrameResize;
+    resizeSession.inFlight = true;
+    window.buddy.windowAction({
+      type: 'resize-by',
+      edge: resizeSession.edge,
+      dx,
+      dy,
+      persistCompact: guidePanel.hidden
+    }).then((result) => {
+      if (result?.ok) {
+        shiftContentAfterWindowFit(rects, result.dx || 0, result.dy || 0);
+      }
+    }).catch(() => {
+      // Keep dragging responsive even if the native window resize request is dropped.
+    }).finally(() => {
+      resizeSession.inFlight = false;
+      if (resizeSession === windowFrameResize && !windowFrameResizeFrame) {
+        const nextDx = Math.round(windowFrameResize.pendingDx);
+        const nextDy = Math.round(windowFrameResize.pendingDy);
+        if (nextDx || nextDy) {
+          windowFrameResizeFrame = requestAnimationFrame(flushWindowResize);
+        } else if (resizeSession.stopping) {
+          windowFrameResize = null;
+        }
+      }
+    });
+  }
+
   handle.addEventListener('pointerdown', (event) => {
     if (!windowEditMode || event.button !== 0) return;
     windowFrameResize = {
       pointerId: event.pointerId,
       edge: handle.dataset.edge,
       lastScreenX: event.screenX,
-      lastScreenY: event.screenY
+      lastScreenY: event.screenY,
+      pendingDx: 0,
+      pendingDy: 0,
+      inFlight: false,
+      stopping: false
     };
+    document.body.classList.add('window-resizing');
     handle.setPointerCapture(event.pointerId);
     event.preventDefault();
     event.stopPropagation();
@@ -1053,19 +1346,27 @@ function setupWindowResizeHandle(handle) {
     const dy = event.screenY - windowFrameResize.lastScreenY;
     windowFrameResize.lastScreenX = event.screenX;
     windowFrameResize.lastScreenY = event.screenY;
-    window.buddy.windowAction({
-      type: 'resize-by',
-      edge: windowFrameResize.edge,
-      dx,
-      dy,
-      persistCompact: guidePanel.hidden
-    });
+    windowFrameResize.pendingDx += dx;
+    windowFrameResize.pendingDy += dy;
+    if (!windowFrameResizeFrame) {
+      windowFrameResizeFrame = requestAnimationFrame(flushWindowResize);
+    }
   });
 
   const stopWindowResize = (event) => {
     if (!windowFrameResize || windowFrameResize.pointerId !== event.pointerId) return;
+    const resizeSession = windowFrameResize;
+    resizeSession.stopping = true;
+    if (windowFrameResizeFrame) {
+      cancelAnimationFrame(windowFrameResizeFrame);
+      windowFrameResizeFrame = null;
+      flushWindowResize();
+    }
     handle.releasePointerCapture(event.pointerId);
-    windowFrameResize = null;
+    if (!resizeSession.inFlight && !windowFrameResizeFrame) {
+      windowFrameResize = null;
+    }
+    document.body.classList.remove('window-resizing');
   };
 
   handle.addEventListener('pointerup', stopWindowResize);
@@ -1233,6 +1534,43 @@ if (guideHeader) {
   guideHeader.addEventListener('pointercancel', stopGuideDrag);
 }
 
+const settingsHeader = settingsPanel?.querySelector('.settings-header');
+if (settingsHeader) {
+  settingsHeader.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || event.target.closest('button')) return;
+    settingsDrag = {
+      pointerId: event.pointerId,
+      lastScreenX: event.screenX,
+      lastScreenY: event.screenY
+    };
+    settingsHeader.setPointerCapture(event.pointerId);
+    settingsHeader.classList.add('dragging');
+    event.preventDefault();
+  });
+
+  settingsHeader.addEventListener('pointermove', (event) => {
+    if (!settingsDrag || settingsDrag.pointerId !== event.pointerId) return;
+    const dx = event.screenX - settingsDrag.lastScreenX;
+    const dy = event.screenY - settingsDrag.lastScreenY;
+    settingsDrag.lastScreenX = event.screenX;
+    settingsDrag.lastScreenY = event.screenY;
+    const rect = settingsPanel.getBoundingClientRect();
+    moveSettingsTo(rect.left + dx, rect.top + dy, { allowOverflow: true });
+    scheduleWindowFit({ persistCompact: false });
+  });
+
+  const stopSettingsDrag = (event) => {
+    if (!settingsDrag || settingsDrag.pointerId !== event.pointerId) return;
+    settingsHeader.releasePointerCapture(event.pointerId);
+    settingsHeader.classList.remove('dragging');
+    settingsDrag = null;
+    scheduleWindowFit({ persistCompact: false });
+  };
+
+  settingsHeader.addEventListener('pointerup', stopSettingsDrag);
+  settingsHeader.addEventListener('pointercancel', stopSettingsDrag);
+}
+
 const birdDragSurface = parrot || birdStage;
 
 function clearAssistantLongPress() {
@@ -1318,9 +1656,11 @@ birdDragSurface.addEventListener('click', (event) => {
     return;
   }
 
-  if (speech?.hidden) {
+  birdClickCount += 1;
+  clearTimeout(birdClickTimer);
+
+  if (speech?.hidden && birdClickCount >= statusBoxRevealClicks) {
     birdClickCount = 0;
-    clearTimeout(birdClickTimer);
     setSpeechVisible(true);
     playPokeAnimation();
     showRandomBirdThought();
@@ -1331,15 +1671,6 @@ birdDragSurface.addEventListener('click', (event) => {
         y: event.screenY
       }
     });
-    return;
-  }
-
-  birdClickCount += 1;
-  clearTimeout(birdClickTimer);
-
-  if (birdClickCount >= 3) {
-    birdClickCount = 0;
-    toggleGuide();
     return;
   }
 
@@ -1366,5 +1697,9 @@ setWindowEditMode(true);
 
 window.buddy.onTasksChanged(render);
 window.buddy.onAgentAlert(playAlertAnimation);
-window.buddy.getSnapshot().then(render);
+window.buddy.onSettingsChanged?.(renderSettings);
+window.buddy.onOpenSettings?.((snapshot) => openSettings(snapshot));
 loadAssistantSnapshot();
+loadSettingsSnapshot().finally(() => {
+  window.buddy.getSnapshot().then(render);
+});

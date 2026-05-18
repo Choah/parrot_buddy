@@ -93,9 +93,10 @@ curl http://127.0.0.1:17872/health
 
 - 흰색 `window size` 외곽선은 실제 Parrot Buddy 창 크기입니다.
 - **이 영역을 크게 만들면 뒤에 켜져 있는 앱이나 창 클릭을 막을 수 있습니다.**
-- 그래서 앵무새와 상태 박스를 감싸는 최소 크기로 두는 것이 좋습니다.
-- 흰색 외곽선 아래쪽의 `guide` 버튼을 누르면 앱 안에서 사용법을 볼 수 있습니다.
-- 기본 compact 창은 현재 기준 배치로 시작합니다. 앵무새는 작게 왼쪽에 있고, 상태 박스는 오른쪽에 붙어 있습니다.
+- 그래서 앵무새와 작업 상태 창을 감싸는 최소 크기로 두는 것이 좋습니다.
+- 흰색 외곽선 아래쪽 왼쪽의 `guide` 버튼을 누르면 앱 안에서 사용법을 볼 수 있습니다.
+- `guide` 오른쪽의 `window size` 표시는 실제 투명 창 크기 조절 모드입니다.
+- 기본 compact 창은 현재 기준 배치로 시작합니다. 앵무새는 작게 왼쪽에 있고, 작업 상태 창은 오른쪽에 붙어 있습니다.
 - 사용자가 위치와 크기를 바꾸면 로컬에 저장되지만, 새 설치자는 이 기본 배치로 시작합니다.
 
 ### 5. 조작법
@@ -106,16 +107,15 @@ curl http://127.0.0.1:17872/health
 - `window size`가 보일 때 앵무새 오른쪽 아래 작은 손잡이 드래그: 앵무새 크기 조절. 현재 크기가 기본값입니다.
 - Guide 제목 줄 드래그: guide가 열린 상태에서 창 전체 이동
 - **앵무새 우클릭 또는 Option을 누른 채 앵무새 클릭: 흰색 `window size` 외곽선 숨기기/다시 표시**
-- 상태 박스 드래그: 상태 박스 위치 이동
-- 상태 박스 왼쪽/오른쪽 아래 핸들: 상태 박스 크기 조정
-- 상태 박스 오른쪽 위 `×`: 상태 박스 숨기기
-- 상태 박스가 숨겨진 상태에서 앵무새 클릭: 상태 박스 다시 표시
-- 앵무새 빠르게 3회 클릭: guide 열기/닫기
-- 외곽선 모서리 드래그: 실제 투명 창 크기 수동 조정
+- 작업 상태 창 드래그: 작업 상태 창 위치 이동
+- 작업 상태 창 왼쪽/오른쪽 아래 핸들: 작업 상태 창 크기 조정
+- 작업 상태 창 오른쪽 위 `×`: 작업 상태 창 숨기기
+- 작업 상태 창이 숨겨진 상태에서 앵무새 빠르게 3회 클릭: 작업 상태 창 다시 표시
+- 외곽선 가장자리나 모서리 드래그: 실제 투명 창 크기 수동 조정
 - Esc: guide 또는 창 크기 조정 모드 닫기
 
-상태 박스를 옮기거나 크기를 조절하면 흰색 창 영역이 내용에 맞춰 자동으로 줄거나 늘어납니다.
-`window size`와 `guide` 탭은 흰색 외곽선 아래쪽에 표시됩니다.
+작업 상태 창을 옮기거나 크기를 조절하면 흰색 창 영역이 내용에 맞춰 자동으로 줄거나 늘어납니다.
+`guide` 탭은 흰색 외곽선 아래쪽 왼쪽에 있고, `window size` 표시는 그 오른쪽에 있습니다.
 
 ### 6. 개인비서 기능
 
@@ -153,10 +153,13 @@ curl http://127.0.0.1:17872/health
 
 - `Show Floating Bird`: 앵무새 창 보이기
 - `Hide Bird`: 앵무새 창 숨기기
+- `Agent Settings`: Codex/Claude Code 감시 연결 설정
 - `Restart Agent Monitor`: Codex/Claude 감시 재시작
 - `Quit`: 앱 완전 종료
 
 Codex 또는 Claude Code가 작업 중이거나 확인을 기다리는 동안에는 메뉴바 아이콘이 흔들립니다.
+
+Codex 또는 Claude Code를 쓰지 않는 사람은 `Agent Settings`에서 해당 감시를 끌 수 있습니다. 설정은 `~/.parrot-buddy/settings.json`에 저장되고, 저장하면 모니터가 즉시 재시작됩니다.
 
 알림 기준:
 
@@ -194,6 +197,7 @@ Claude IDE lock files
 ```
 
 대화 전문은 UI에 표시하지 않습니다. 상태 판단에 필요한 lifecycle event, timestamp, cwd, process 정보만 사용합니다.
+다른 설치 경로를 쓰는 경우 `Agent Settings`에서 Codex sessions root, Claude projects/transcripts/lock 경로를 바꾸면 됩니다.
 
 ### 10. 문제 해결
 
@@ -342,8 +346,8 @@ curl http://127.0.0.1:17872/health
 
 - The white `window size` outline is the real Parrot Buddy window.
 - **If this area is too large, it can block clicks to apps or windows behind it.**
-- Keep it as small as possible around the parrot and status box.
-- Click the `guide` button next to `window size` to open the in-app guide.
+- Keep it as small as possible around the parrot and work status window.
+- Click the left `guide` tab to open the in-app guide. The `window size` label sits to its right.
 
 ### 5. Controls
 
@@ -352,15 +356,14 @@ curl http://127.0.0.1:17872/health
 - When `window size` is visible, drag the small handle at the lower-right of the parrot: resize the parrot. The current size is the default.
 - Drag the Guide title bar: move the whole window while the guide is open
 - **Right-click the parrot or Option + click the parrot: hide/show the white `window size` outline**
-- Drag the status box: move the status box inside the window
-- Drag the lower-left/lower-right handles on the status box: resize the status box
-- Click `×` on the status box: hide the status box
-- Click the parrot while the status box is hidden: show the status box again
-- Triple-click the parrot quickly: open/close the guide
-- Drag the white outline corners: manually resize the transparent window
+- Drag the work status window: move only that window
+- Drag the lower-left/lower-right handles on the work status window: resize it
+- Click `×` on the work status window: hide it
+- Triple-click the parrot quickly while the work status window is hidden: show it again
+- Drag the white outline edges or corners: manually resize the transparent window
 - Esc: close the guide or window resize mode
 
-When you move or resize the status box, the white window area automatically fits around the visible content.
+When you move or resize the work status window, the white window area automatically fits around the visible content.
 
 ### 6. Personal Assistant
 
@@ -368,7 +371,7 @@ Long-press the parrot to open the personal assistant chat. The assistant is name
 
 Simple greetings and obvious small talk are answered immediately in Joy's persona and are not saved. For other messages, Codex classifies the message as chat, recall, memory, schedule, task, or note in the same JSON response it uses to answer. Joy only saves reusable personal facts, preferences, plans, appointments, decisions, and follow-ups. If Codex marks a message as ordinary chat or recall, Parrot Buddy blocks history, memory, and reminder writes.
 
-You can drag the Joy assistant panel by its header or empty panel area to move only the assistant panel, similar to the status box. Drag the parrot itself to move the whole floating window. Text input, buttons, message scroll, and reminder buttons remain clickable.
+You can drag the Joy Assistant by its header or empty panel area to move only that assistant window. Drag the parrot itself to move the whole floating window. Text input, buttons, message scroll, and reminder buttons remain clickable.
 
 This feature does not use model API keys in `.env`.
 
@@ -392,10 +395,13 @@ Click the menu bar parrot icon to see current agent status and actions.
 
 - `Show Floating Bird`: show the floating parrot window
 - `Hide Bird`: hide the floating parrot window
+- `Agent Settings`: configure Codex/Claude Code monitoring
 - `Restart Agent Monitor`: restart Codex/Claude monitoring
 - `Quit`: quit the app
 
 The menu bar icon wiggles while Codex or Claude Code is working or waiting for confirmation.
+
+Users who do not use Codex or Claude Code can disable either connection in `Agent Settings`. Settings are saved to `~/.parrot-buddy/settings.json`, and saving restarts the monitor immediately.
 
 Notification rules:
 
@@ -433,6 +439,7 @@ Claude IDE lock files
 ```
 
 Parrot Buddy does not display full conversation text. It only uses lifecycle events, timestamps, cwd, and process information needed to infer status.
+If an agent uses a non-default install location, update the Codex sessions root or Claude projects/transcripts/lock paths in `Agent Settings`.
 
 ### 10. Troubleshooting
 

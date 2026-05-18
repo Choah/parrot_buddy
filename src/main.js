@@ -7,8 +7,10 @@ const { playAttentionSound, playCompletionSound } = require('./sound');
 const { AgentMonitor } = require('./agent-monitor');
 const { AssistantOrchestrator } = require('./assistant/assistant-orchestrator');
 const { STATUS_SOURCES } = require('./task-store');
+const { SettingsStore } = require('./settings-store');
 
 const store = new TaskStore();
+const settingsStore = new SettingsStore();
 const runningProcesses = new Map();
 let mainWindow = null;
 let apiServer = null;
@@ -56,10 +58,43 @@ function broadcastAgentAlert(kind, task) {
   });
 }
 
+function broadcastSettingsSnapshot(snapshot = settingsStore.snapshot()) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('settings:changed', snapshot);
+}
+
 function notifyAgentFinished(task) {
   if (task?.silent) return;
   playCompletionSound(task?.status === 'stopped' ? 'stopped' : task?.status || 'success');
   broadcastAgentAlert('finished', task);
+}
+
+function clearAgentTasks() {
+  for (const task of Array.from(store.tasks.values())) {
+    if (task.source === 'agent') store.removeTask(task.id);
+  }
+}
+
+function createAgentMonitor() {
+  return new AgentMonitor({
+    store,
+    ...settingsStore.monitorOptions(),
+    onAgentAttention(task) {
+      notifyAgentAttention(task);
+    },
+    onAgentFinished(task) {
+      notifyAgentFinished(task);
+    }
+  });
+}
+
+function restartAgentMonitor() {
+  agentMonitor?.stop();
+  clearAgentTasks();
+  agentMonitor = createAgentMonitor();
+  agentMonitor.start();
+  broadcastSnapshot();
+  updateTrayMenu();
 }
 
 function notifyAgentAttention(task) {
@@ -128,6 +163,23 @@ function hideWindow() {
   stopWander();
 }
 
+function openAgentSettings() {
+  showWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  const sendOpen = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('settings:open', settingsStore.snapshot());
+  };
+
+  if (mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.once('did-finish-load', sendOpen);
+    return;
+  }
+
+  sendOpen();
+}
+
 function truncateLabel(value, maxLength = 48) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (text.length <= maxLength) return text;
@@ -183,12 +235,22 @@ function visibleTrayTasks(snapshot = store.snapshot()) {
 
 function traySummaryLabel(snapshot = store.snapshot()) {
   const summary = snapshot.summary || {};
+  const enabled = enabledAgentNames();
+  if (enabled.length === 0) return 'Status: agent monitoring off';
   const hitlCount = (summary.agentHitlCount || 0) + (summary.assistantHitlCount || 0);
   const runningCount = (summary.agentRunningCount || 0) + (summary.assistantRunningCount || 0);
   if (hitlCount > 0) return `Status: confirm needed (${hitlCount})`;
   if (runningCount > 0) return `Status: working (${runningCount})`;
   if (summary.agentReadyCount > 0) return `Status: ready (${summary.agentReadyCount})`;
   return 'Status: no active agents';
+}
+
+function enabledAgentNames() {
+  const settings = settingsStore.read();
+  const names = [];
+  if (settings.agents.codex.enabled) names.push('Codex');
+  if (settings.agents.claude.enabled) names.push('Claude Code');
+  return names;
 }
 
 function buildTrayMenu(snapshot = store.snapshot()) {
@@ -200,7 +262,11 @@ function buildTrayMenu(snapshot = store.snapshot()) {
     }));
 
   if (statusItems.length === 0) {
-    statusItems.push({ label: 'Codex / Claude Code waiting', enabled: false });
+    const enabled = enabledAgentNames();
+    statusItems.push({
+      label: enabled.length > 0 ? `${enabled.join(' / ')} waiting` : 'No agent monitoring enabled',
+      enabled: false
+    });
   }
 
   const hiddenCount = visibleTrayTasks(snapshot).length - statusItems.length;
@@ -212,11 +278,11 @@ function buildTrayMenu(snapshot = store.snapshot()) {
     { label: 'Parrot Buddy', enabled: false },
     { label: 'Show Floating Bird', click: showWindow },
     { label: 'Hide Bird', click: hideWindow },
+    { label: 'Agent Settings', click: openAgentSettings },
     {
       label: 'Restart Agent Monitor',
       click: () => {
-        agentMonitor?.restart();
-        broadcastSnapshot();
+        restartAgentMonitor();
       }
     },
     { type: 'separator' },
@@ -362,12 +428,12 @@ function setWindowSize({ width, height }) {
 }
 
 function resizeWindowBy(delta = {}) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false };
 
   const edge = String(delta.edge || '');
   const dx = Number(delta.dx) || 0;
   const dy = Number(delta.dy) || 0;
-  if (!edge || (!dx && !dy)) return;
+  if (!edge || (!dx && !dy)) return { ok: false };
 
   const bounds = mainWindow.getBounds();
   const workArea = screen.getDisplayMatching(bounds).workArea;
@@ -429,6 +495,13 @@ function resizeWindowBy(delta = {}) {
       height: nextBounds.height
     };
   }
+
+  return {
+    ok: true,
+    dx: nextBounds.x - bounds.x,
+    dy: nextBounds.y - bounds.y,
+    bounds: nextBounds
+  };
 }
 
 function fitWindowToContent(frame = {}) {
@@ -596,19 +669,12 @@ function stopThoughtScheduler() {
 }
 
 app.whenReady().then(async () => {
+  settingsStore.ensureBase();
   store.on('change', broadcastSnapshot);
   store.on('change', updateTrayMenu);
   store.on('change', updateTrayActivity);
   await startApiServer();
-  agentMonitor = new AgentMonitor({
-    store,
-    onAgentAttention(task) {
-      notifyAgentAttention(task);
-    },
-    onAgentFinished(task) {
-      notifyAgentFinished(task);
-    }
-  });
+  agentMonitor = createAgentMonitor();
   agentMonitor.start();
   assistantOrchestrator = new AssistantOrchestrator();
   assistantOrchestrator.on('changed', () => {
@@ -647,6 +713,24 @@ app.on('window-all-closed', () => {
 });
 
 ipcMain.handle('tasks:snapshot', () => store.snapshot());
+
+ipcMain.handle('settings:snapshot', () => settingsStore.snapshot());
+
+ipcMain.handle('settings:save', (_event, payload = {}) => {
+  settingsStore.update(payload);
+  restartAgentMonitor();
+  const snapshot = settingsStore.snapshot();
+  broadcastSettingsSnapshot(snapshot);
+  return snapshot;
+});
+
+ipcMain.handle('settings:reset', () => {
+  settingsStore.reset();
+  restartAgentMonitor();
+  const snapshot = settingsStore.snapshot();
+  broadcastSettingsSnapshot(snapshot);
+  return snapshot;
+});
 
 ipcMain.handle('assistant:snapshot', () => assistantOrchestrator?.snapshot() || { ok: false });
 

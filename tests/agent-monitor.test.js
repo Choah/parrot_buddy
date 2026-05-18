@@ -598,3 +598,62 @@ test('does not show Claude Code ready for stale IDE locks owned by non-Claude pr
   assert.equal(task.status, 'stopped');
   assert.equal(task.command, 'Claude Code process not detected');
 });
+
+test('does not create Codex tasks when Codex monitoring is disabled', () => {
+  const store = new TaskStore();
+  const monitor = new AgentMonitor({
+    store,
+    pollMs: 999999,
+    enabledAgents: { codex: false, claude: false }
+  });
+
+  monitor.codexContexts.set('turn-disabled', { cwd: '/tmp/test_kit' });
+  monitor.codexActiveTurns.set('turn-disabled', {
+    startedAt: new Date().toISOString(),
+    filePath: '/tmp/disabled.jsonl',
+    fileMtimeMs: Date.now()
+  });
+  store.upsertTask({
+    id: 'agent-codex-ready',
+    label: 'Codex',
+    source: 'agent',
+    command: 'Codex is open',
+    status: 'waiting'
+  });
+
+  monitor.updateAgentTasks([
+    '101 /opt/homebrew/bin/codex codex'
+  ]);
+
+  assert.equal(store.snapshot().tasks.some((task) => task.id.startsWith('codex-')), false);
+  assert.equal(store.snapshot().tasks.some((task) => task.id === 'agent-codex-ready'), false);
+});
+
+test('does not create Claude Code tasks when Claude monitoring is disabled', () => {
+  const store = new TaskStore();
+  const monitor = new AgentMonitor({
+    store,
+    pollMs: 999999,
+    enabledAgents: { codex: false, claude: false }
+  });
+
+  monitor.applyClaudeEvent({
+    type: 'tool_use',
+    cwd: '/tmp/claude_project',
+    at: new Date().toISOString()
+  });
+  store.upsertTask({
+    id: 'agent-claude',
+    label: 'Claude Code',
+    source: 'agent',
+    command: 'Claude Code is open',
+    status: 'waiting'
+  });
+
+  monitor.updateAgentTasks([
+    '202 /opt/homebrew/bin/claude claude'
+  ]);
+
+  assert.equal(store.snapshot().tasks.some((task) => task.id.startsWith('claude-')), false);
+  assert.equal(store.snapshot().tasks.some((task) => task.id === 'agent-claude'), false);
+});
