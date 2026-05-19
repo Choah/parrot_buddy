@@ -24,18 +24,24 @@ let agentMonitor = null;
 let assistantOrchestrator = null;
 let reminderTimer = null;
 let thoughtTimer = null;
+let memoryMaintenanceTimer = null;
+let memoryMaintenanceInitialTimer = null;
+let memoryMaintenanceRunning = false;
 let wanderTimer = null;
 let pokeTimer = null;
 let wanderVelocity = { x: 0.45, y: 0.28 };
 const assetPath = (...parts) => path.join(__dirname, '..', 'assets', ...parts);
-const COMPACT_WINDOW_BOUNDS = { x: 343, y: 333, width: 376, height: 111 };
+const COMPACT_WINDOW_BOUNDS = { x: 343, y: 333, width: 386, height: 118 };
 const COMPACT_WINDOW_SIZE = {
   width: COMPACT_WINDOW_BOUNDS.width,
   height: COMPACT_WINDOW_BOUNDS.height
 };
 const EXPANDED_PANEL_WINDOW_SIZE = { width: 430, height: 520 };
+const ASSISTANT_PANEL_WINDOW_SIZE = { width: 430, height: 500 };
 const MIN_WINDOW_SIZE = { width: 92, height: 88 };
 const MAX_TRAY_STATUS_ITEMS = 6;
+const MEMORY_MAINTENANCE_START_DELAY_MS = 2 * 60 * 1000;
+const MEMORY_MAINTENANCE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 let compactWindowSize = { ...COMPACT_WINDOW_SIZE };
 let expandedPanelWindowOpen = false;
 
@@ -54,6 +60,8 @@ function broadcastAgentAlert(kind, task) {
     kind,
     id: task?.id,
     label: task?.label,
+    command: task?.command,
+    source: task?.source,
     status: task?.status
   });
 }
@@ -207,14 +215,12 @@ function agentName(task) {
 
   const codexTurn = label.match(/^Codex:\s*([^#]+?)(?:\s*#(.+))?$/);
   if (codexTurn) {
-    const suffix = codexTurn[2] ? ` #${codexTurn[2].trim()}` : '';
-    return `Codex · ${codexTurn[1].trim()}${suffix}`;
+    return `Codex · ${codexTurn[1].trim()}`;
   }
 
   const codexTerminal = label.match(/^Codex Terminal:\s*(.+)$/);
   if (codexTerminal) {
-    const pid = command.match(/pid\s+(\d+)/);
-    return `Codex terminal · ${codexTerminal[1].trim()}${pid ? ` #${pid[1]}` : ''}`;
+    return `Codex terminal · ${codexTerminal[1].trim()}`;
   }
 
   const claude = label.match(/^Claude:\s*(.+)$/);
@@ -410,7 +416,7 @@ function pokeWindow(pointer) {
   stopWander();
 }
 
-function setWindowSize({ width, height }) {
+function setWindowSize({ width, height, animate = false }) {
   if (!mainWindow || mainWindow.isDestroyed()) return { ok: false };
   const nextWidth = Math.round(Math.max(MIN_WINDOW_SIZE.width, Number(width) || COMPACT_WINDOW_SIZE.width));
   const nextHeight = Math.round(Math.max(MIN_WINDOW_SIZE.height, Number(height) || COMPACT_WINDOW_SIZE.height));
@@ -424,7 +430,7 @@ function setWindowSize({ width, height }) {
     y: Math.round(nextY),
     width: nextWidth,
     height: nextHeight
-  }, false);
+  }, Boolean(animate));
   return { ok: true, bounds: mainWindow.getBounds() };
 }
 
@@ -489,8 +495,8 @@ function resizeWindowBy(delta = {}) {
     height: Math.round(Math.max(MIN_WINDOW_SIZE.height, height))
   };
 
-  mainWindow.setBounds(nextBounds, false);
-  if (delta.persistCompact !== false && !guideWindowOpen) {
+  mainWindow.setBounds(nextBounds, Boolean(frame.animate));
+  if (delta.persistCompact !== false && !expandedPanelWindowOpen) {
     compactWindowSize = {
       width: nextBounds.width,
       height: nextBounds.height
@@ -669,6 +675,44 @@ function stopThoughtScheduler() {
   thoughtTimer = null;
 }
 
+async function runMemoryMaintenance() {
+  if (!assistantOrchestrator || memoryMaintenanceRunning) return;
+  memoryMaintenanceRunning = true;
+  try {
+    const result = await assistantOrchestrator.runMemoryMaintenance({ now: new Date() });
+    if (result?.changed) {
+      refreshDailyThoughts();
+      broadcastSnapshot();
+    }
+  } catch (error) {
+    console.error('Could not run Joy memory maintenance:', error.message);
+  } finally {
+    memoryMaintenanceRunning = false;
+  }
+}
+
+function startMemoryMaintenanceScheduler() {
+  if (memoryMaintenanceTimer || memoryMaintenanceInitialTimer) return;
+  memoryMaintenanceInitialTimer = setTimeout(() => {
+    memoryMaintenanceInitialTimer = null;
+    runMemoryMaintenance();
+  }, MEMORY_MAINTENANCE_START_DELAY_MS);
+  memoryMaintenanceInitialTimer.unref?.();
+  memoryMaintenanceTimer = setInterval(runMemoryMaintenance, MEMORY_MAINTENANCE_CHECK_INTERVAL_MS);
+  memoryMaintenanceTimer.unref?.();
+}
+
+function stopMemoryMaintenanceScheduler() {
+  if (memoryMaintenanceInitialTimer) {
+    clearTimeout(memoryMaintenanceInitialTimer);
+    memoryMaintenanceInitialTimer = null;
+  }
+  if (memoryMaintenanceTimer) {
+    clearInterval(memoryMaintenanceTimer);
+    memoryMaintenanceTimer = null;
+  }
+}
+
 app.whenReady().then(async () => {
   settingsStore.ensureBase();
   store.on('change', broadcastSnapshot);
@@ -684,6 +728,7 @@ app.whenReady().then(async () => {
   });
   startReminderScheduler();
   startThoughtScheduler();
+  startMemoryMaintenanceScheduler();
   createTray();
   createWindow();
 
@@ -698,6 +743,7 @@ app.on('before-quit', async () => {
   stopWander();
   stopReminderScheduler();
   stopThoughtScheduler();
+  stopMemoryMaintenanceScheduler();
   agentMonitor?.stop();
 
   for (const child of runningProcesses.values()) {
@@ -805,7 +851,13 @@ ipcMain.handle('window:action', (_event, action) => {
   if (actionType === 'fit-to-content') return fitWindowToContent(action);
   if (actionType === 'guide-mode' || actionType === 'panel-mode') {
     expandedPanelWindowOpen = Boolean(action.open);
-    return setWindowSize(expandedPanelWindowOpen ? EXPANDED_PANEL_WINDOW_SIZE : compactWindowSize);
+    const expandedSize = action?.panel === 'assistant'
+      ? ASSISTANT_PANEL_WINDOW_SIZE
+      : EXPANDED_PANEL_WINDOW_SIZE;
+    return setWindowSize({
+      ...(expandedPanelWindowOpen ? expandedSize : compactWindowSize),
+      animate: Boolean(action.animate)
+    });
   }
   if (actionType === 'poke') pokeWindow(action.pointer);
   if (actionType === 'hide') hideWindow();

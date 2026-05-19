@@ -162,6 +162,48 @@ class AssistantOrchestrator extends EventEmitter {
     return reminder;
   }
 
+  async runMemoryMaintenance({ now = new Date(), force = false } = {}) {
+    const readiness = this.store.shouldRunMemoryMaintenance(now, { force });
+    if (!readiness.ok) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: readiness.reason,
+        snapshot: this.snapshot(now)
+      };
+    }
+
+    try {
+      const context = this.store.loadMemoryMaintenanceContext(now, this.reminderStore);
+      const result = await this.codexAdapter.runMemoryMaintenance({
+        context,
+        assistantRoot: this.store.root,
+        now
+      });
+      const applyResult = this.store.applyMemoryMaintenance(result, { now });
+      const response = {
+        ok: true,
+        ...applyResult,
+        summary: result.summary,
+        removed: result.removed,
+        snapshot: this.snapshot(now)
+      };
+      if (applyResult.changed) this.emit('changed', response);
+      return response;
+    } catch (error) {
+      const isCodex = error instanceof CodexUnavailableError;
+      return {
+        ok: false,
+        setupRequired: isCodex,
+        error: isCodex
+          ? 'Codex CLI를 실행할 수 없어 장기 메모리 정리를 건너뛰었어요.'
+          : error.message,
+        details: isCodex ? error.details : undefined,
+        snapshot: this.snapshot(now)
+      };
+    }
+  }
+
   randomThought(now = new Date()) {
     return this.store.randomThought(now);
   }

@@ -178,3 +178,56 @@ test('routes memory statements through Codex for storage', async () => {
   assert.equal(result.route.saveRequired, true);
   assert.match(fs.readFileSync(path.join(root, 'memory.md'), 'utf8'), /스파게티/);
 });
+
+test('orchestrator runs memory maintenance when due', async () => {
+  const root = tempRoot();
+  const store = new AssistantStore({ root, timezone: 'Asia/Seoul' });
+  const reminderStore = new ReminderStore({ root, timezone: 'Asia/Seoul' });
+  store.ensureBase();
+  fs.writeFileSync(
+    path.join(root, 'memory.md'),
+    [
+      '# Parrot Buddy Memory',
+      '',
+      ...Array.from({ length: 36 }, (_, index) => (
+        `- 중복 메모 ${index}: 사용자는 조이 Assistant 답변을 짧고 이해하기 쉽게 다듬는 것을 선호한다.`
+      ))
+    ].join('\n'),
+    'utf8'
+  );
+  const codexAdapter = {
+    runMemoryMaintenance: async ({ context }) => {
+      assert.match(context.memory, /중복 메모/);
+      return {
+        memory: [
+          '# Parrot Buddy Memory',
+          '',
+          '## 사용자',
+          '- 사용자는 조이 Assistant 답변을 짧고 이해하기 쉽게 다듬는 것을 선호한다.',
+          '- 사용자는 앵무새 말풍선과 Assistant 대화창이 함께 최신 답변을 보여주길 원한다.',
+          '- 사용자는 작업 상태와 알림 문구에서 내부 해시 대신 간단한 번호를 선호한다.',
+          '- 사용자는 window size UI가 작업 상태 박스 조절을 방해하지 않길 원한다.',
+          '- 사용자는 오래 남길 정보만 유지하고 일회성 중복 기록은 정리하길 원한다.',
+          '',
+          '## 조이 / Assistant 선호',
+          '- 조이는 겉으로는 차갑지만 따뜻한 츤데레 톤을 유지한다.',
+          '- 답변은 한국어로 간결하게 한다.'
+        ].join('\n'),
+        summary: '중복 메모를 장기 선호로 합쳤다.',
+        removed: ['반복된 Assistant 답변 선호 기록']
+      };
+    }
+  };
+  const orchestrator = new AssistantOrchestrator({ store, reminderStore, codexAdapter });
+
+  const result = await orchestrator.runMemoryMaintenance({
+    now: new Date('2026-05-19T03:00:00.000Z'),
+    force: true
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, true);
+  assert.equal(result.summary, '중복 메모를 장기 선호로 합쳤다.');
+  assert.match(fs.readFileSync(path.join(root, 'memory.md'), 'utf8'), /오래 남길 정보/);
+  assert.ok(fs.existsSync(path.join(root, 'memory-maintenance.json')));
+});

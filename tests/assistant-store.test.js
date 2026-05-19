@@ -156,3 +156,74 @@ test('builds daily Joy thoughts from memory and recent sessions', () => {
   assert.match(joined, /병원 예약/);
   assert.ok(fs.existsSync(path.join(root, 'thoughts', '2026-05-18.json')));
 });
+
+test('applies memory maintenance with backup and state', () => {
+  const root = tempRoot();
+  const store = new AssistantStore({ root, timezone: 'Asia/Seoul' });
+  const now = new Date('2026-05-19T03:00:00.000Z');
+  store.ensureBase();
+  const noisyMemory = [
+    '# Parrot Buddy Memory',
+    '',
+    ...Array.from({ length: 34 }, (_, index) => (
+      `- 사용자는 짧은 설명과 간단한 UI를 선호한다. 중복 기록 ${index}.`
+    ))
+  ].join('\n');
+  fs.writeFileSync(path.join(root, 'memory.md'), `${noisyMemory}\n`, 'utf8');
+
+  const readiness = store.shouldRunMemoryMaintenance(now, { force: true });
+  assert.equal(readiness.ok, true);
+
+  const compactMemory = [
+    '# Parrot Buddy Memory',
+    '',
+    '## 사용자',
+    '- 사용자는 짧은 설명과 간단한 UI를 선호한다.',
+    '- 조이 Assistant는 처음 보는 사용자도 이해하기 쉬운 문구를 선호한다.',
+    '- 작업 완료 알림은 앵무새 말풍선에도 표시되길 원한다.',
+    '- 오래 남길 정보만 유지하고 일회성 중복 기록은 정리한다.',
+    '- 창 크기와 말풍선 크기는 직접 조절한 값을 유지하길 원한다.',
+    '',
+    '## 조이 / Assistant 선호',
+    '- 조이는 겉으로는 차갑지만 따뜻한 츤데레 톤을 유지한다.',
+    '- 답변은 한국어로 간결하게 한다.'
+  ].join('\n');
+  const result = store.applyMemoryMaintenance({
+    memory: compactMemory,
+    summary: '중복된 UI 선호 메모를 합쳤다.',
+    removed: ['반복된 짧은 설명 선호 기록']
+  }, { now });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, true);
+  assert.match(fs.readFileSync(path.join(root, 'memory.md'), 'utf8'), /조이 Assistant/);
+  assert.ok(fs.existsSync(path.join(root, 'memory-backups', '2026-05-19-120000.md')));
+  assert.equal(store.memoryMaintenanceState().status, 'compacted');
+  assert.equal(store.shouldRunMemoryMaintenance(now).reason, 'memory-unchanged');
+});
+
+test('skips unsafe short memory maintenance result', () => {
+  const root = tempRoot();
+  const store = new AssistantStore({ root, timezone: 'Asia/Seoul' });
+  const now = new Date('2026-05-19T03:00:00.000Z');
+  store.ensureBase();
+  const original = [
+    '# Parrot Buddy Memory',
+    '',
+    ...Array.from({ length: 50 }, (_, index) => (
+      `- 중요한 장기 메모 ${index}: 사용자는 조이 Assistant와 Parrot Buddy UI 설정을 이어서 다듬고 있다.`
+    ))
+  ].join('\n');
+  fs.writeFileSync(path.join(root, 'memory.md'), `${original}\n`, 'utf8');
+
+  const result = store.applyMemoryMaintenance({
+    memory: '# Parrot Buddy Memory\n\n- 너무 짧음',
+    summary: '너무 많이 줄임'
+  }, { now });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.skipped, true);
+  assert.equal(result.reason, 'unsafe-short-result');
+  assert.match(fs.readFileSync(path.join(root, 'memory.md'), 'utf8'), /중요한 장기 메모 49/);
+  assert.equal(store.memoryMaintenanceState().status, 'skipped-unsafe-short');
+});

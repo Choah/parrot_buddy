@@ -176,6 +176,60 @@ function buildAssistantPrompt({ message, context, now = new Date() }) {
   ].join('\n');
 }
 
+function buildMemoryMaintenancePrompt({ context, now = new Date() }) {
+  return [
+    'You are the background memory maintenance worker for Joy, the Parrot Buddy assistant.',
+    'Return JSON only. Do not write files. Do not use tools. Do not include markdown fences.',
+    '',
+    'Goal:',
+    '- Rewrite memory.md into a concise, durable long-term memory file.',
+    '- Keep user facts, preferences, stable habits, recurring constraints, assistant persona preferences, and current long-running context.',
+    '- Remove duplicates, stale one-off tasks, old completed reminders, generic chat, accidental log fragments, and contradicted older preferences.',
+    '- When memories conflict, keep the newest or most specific version and drop the older one.',
+    '- Do not invent new facts. Only use the provided memory, recent history, sessions, and reminders.',
+    '- Keep Korean wording natural and compact.',
+    '',
+    'Required JSON shape:',
+    JSON.stringify({
+      memory: '# Parrot Buddy Memory\n\n## 사용자\n- ...\n\n## 조이 / Assistant 선호\n- ...',
+      summary: 'what changed in one Korean sentence',
+      removed: ['short description of removed duplicate or stale item']
+    }, null, 2),
+    '',
+    `Current time: ${now.toISOString()}`,
+    `Local date: ${context.dateKey}`,
+    `Timezone: ${context.timezone}`,
+    '',
+    'Current memory.md:',
+    context.memory || '(empty)',
+    '',
+    'Upcoming reminders:',
+    JSON.stringify(context.reminders || [], null, 2),
+    '',
+    'Recent history, newest first:',
+    JSON.stringify(context.recentHistory || [], null, 2),
+    '',
+    'Recent assistant sessions, newest first:',
+    JSON.stringify(context.recentSessions || [], null, 2)
+  ].join('\n');
+}
+
+function validateMemoryMaintenanceResult(result) {
+  if (!result || typeof result !== 'object') {
+    throw new Error('Memory maintenance result must be an object');
+  }
+  if (typeof result.memory !== 'string' || !result.memory.trim()) {
+    throw new Error('Memory maintenance result memory is required');
+  }
+  return {
+    memory: result.memory.trim(),
+    summary: typeof result.summary === 'string' ? result.summary.trim() : '',
+    removed: Array.isArray(result.removed)
+      ? result.removed.map((item) => String(item || '').trim()).filter(Boolean)
+      : []
+  };
+}
+
 function runCodexProcess({ command, args, input, timeoutMs = 120000 }) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -258,13 +312,49 @@ class CodexAdapter {
       fs.rmSync(outputPath, { force: true });
     }
   }
+
+  async runMemoryMaintenance({ context, assistantRoot, now = new Date() }) {
+    const prompt = buildMemoryMaintenancePrompt({ context, now });
+    const outputPath = path.join(os.tmpdir(), `parrot-buddy-memory-${process.pid}-${Date.now()}.txt`);
+    const args = [
+      '--ask-for-approval',
+      'never',
+      'exec',
+      '--skip-git-repo-check',
+      '--ephemeral',
+      '--sandbox',
+      'read-only',
+      '--cd',
+      assistantRoot,
+      '--output-last-message',
+      outputPath,
+      '-'
+    ];
+
+    try {
+      const result = await this.runner({
+        command: this.command,
+        args,
+        input: prompt,
+        timeoutMs: 120000
+      });
+      const responseText = fs.existsSync(outputPath)
+        ? fs.readFileSync(outputPath, 'utf8')
+        : result.stdout;
+      return validateMemoryMaintenanceResult(extractJson(responseText || result.stdout));
+    } finally {
+      fs.rmSync(outputPath, { force: true });
+    }
+  }
 }
 
 module.exports = {
   CodexAdapter,
   CodexUnavailableError,
   buildAssistantPrompt,
+  buildMemoryMaintenancePrompt,
   extractJson,
   validateAction,
+  validateMemoryMaintenanceResult,
   runCodexProcess
 };

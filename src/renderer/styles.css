@@ -106,10 +106,10 @@ body.window-resizing .window-frame-editor {
     inset 0 0 0 1px rgba(255, 255, 255, 0.84);
 }
 
-.window-frame-label,
 .window-guide-button {
   position: absolute;
   bottom: -1px;
+  left: 12px;
   min-height: 16px;
   padding: 2px 7px;
   border: 1px solid rgba(90, 61, 17, 0.16);
@@ -120,17 +120,9 @@ body.window-resizing .window-frame-editor {
   font-size: 10px;
   font-weight: 850;
   line-height: 1;
-}
-
-.window-guide-button {
-  left: 12px;
   appearance: none;
   pointer-events: none;
   cursor: help;
-}
-
-.window-frame-label {
-  left: 60px;
 }
 
 body.window-editing .window-guide-button {
@@ -313,6 +305,12 @@ body.window-editing .window-resize-handle {
   cursor: grab;
 }
 
+body.window-editing .speech,
+body.window-editing .settings-panel,
+body.window-editing .assistant-panel {
+  z-index: 110;
+}
+
 .speech[hidden] {
   display: none;
 }
@@ -402,48 +400,47 @@ body.window-editing .window-resize-handle {
   place-items: center;
   position: absolute;
   z-index: 2;
-  width: 14px;
-  height: 14px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
-  border-radius: 4px 4px 8px 4px;
-  background: rgba(255, 255, 255, 0.48);
+  border-radius: 50%;
+  background: transparent;
   cursor: nwse-resize;
   touch-action: none;
 }
 
 .speech-resize-handle.left {
-  left: 3px;
-  bottom: 3px;
-  border-radius: 4px 4px 4px 8px;
+  left: 0;
+  bottom: 0;
   cursor: nesw-resize;
 }
 
 .speech-resize-handle.right {
-  right: 3px;
-  bottom: 3px;
-  border-radius: 4px 4px 8px 4px;
+  right: 0;
+  bottom: 0;
   cursor: nwse-resize;
 }
 
 .speech-resize-handle:hover {
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(240, 138, 75, 0.08);
 }
 
 .speech-resize-handle::before {
   content: "";
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 6px;
-  height: 6px;
+  right: 7px;
+  bottom: 7px;
+  width: 10px;
+  height: 10px;
   border-right: 1.5px solid rgba(117, 99, 71, 0.42);
   border-bottom: 1.5px solid rgba(117, 99, 71, 0.42);
   border-radius: 1px;
+  background: rgba(255, 255, 255, 0.56);
 }
 
 .speech-resize-handle.left::before {
-  left: 4px;
+  left: 7px;
   right: auto;
   border-right: 0;
   border-left: 1.5px solid rgba(117, 99, 71, 0.42);
@@ -463,6 +460,11 @@ body.window-editing .window-resize-handle {
   place-items: center;
   touch-action: none;
   pointer-events: none;
+}
+
+.bird-stage.thinking,
+.bird-stage.thoughtful {
+  z-index: 120;
 }
 
 .bird-thinking {
@@ -486,6 +488,67 @@ body.window-editing .window-resize-handle {
   white-space: normal;
   overflow-wrap: anywhere;
   pointer-events: none;
+}
+
+.bird-bubble-text {
+  display: block;
+  pointer-events: none;
+}
+
+.bird-bubble-resize-handle {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 18px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 4px 10px rgba(74, 48, 14, 0.1);
+  cursor: ew-resize;
+  opacity: 0;
+  pointer-events: none;
+  touch-action: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+body.window-editing .bird-bubble-resize-handle,
+.bird-thinking.resizing .bird-bubble-resize-handle {
+  opacity: 0.56;
+  pointer-events: auto;
+}
+
+.bird-bubble-resize-handle.left {
+  left: -9px;
+}
+
+.bird-bubble-resize-handle.right {
+  right: -9px;
+}
+
+.bird-bubble-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 7px;
+  width: 3px;
+  height: 16px;
+  border-left: 1px solid rgba(117, 99, 71, 0.48);
+  border-right: 1px solid rgba(117, 99, 71, 0.48);
+}
+
+body.window-editing .bird-thinking:hover .bird-bubble-resize-handle,
+.bird-thinking.resizing .bird-bubble-resize-handle {
+  opacity: 0.86;
+}
+
+body.window-editing .bird-bubble-resize-handle:hover,
+body.window-editing .bird-bubble-resize-handle:active,
+.bird-thinking.resizing .bird-bubble-resize-handle:active {
+  background: #fff9e6;
+  opacity: 1;
 }
 
 .bird-stage.thoughtful .bird-thinking {
@@ -527,7 +590,7 @@ body.window-editing .window-resize-handle {
   transform: rotate(225deg);
 }
 
-.bird-thinking span::after {
+.thinking-dots::after {
   content: "...";
   display: inline-block;
   width: 1.4em;
@@ -842,7 +905,7 @@ body.window-editing .bird-resize-handle {
   left: 8px;
   top: 55px;
   width: min(414px, calc(100vw - 16px));
-  height: min(430px, calc(100vh - 84px));
+  height: min(430px, calc(100vh - 70px));
   max-height: none;
   border-radius: 14px;
 }

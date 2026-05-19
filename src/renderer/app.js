@@ -46,7 +46,7 @@ const birdThinking = document.getElementById('birdThinking');
 const birdResizeHandle = document.getElementById('birdResizeHandle');
 const windowFrameEditor = document.getElementById('windowFrameEditor');
 const windowResizeHandles = document.querySelectorAll('.window-resize-handle');
-const layoutStorageKey = 'parrotBuddyLayoutV8';
+const layoutStorageKey = 'parrotBuddyLayoutV10';
 const enableSpeechFloating = false;
 const speechMargin = 8;
 const speechMinSize = { width: 96, height: 40 };
@@ -59,8 +59,13 @@ const assistantLongPressMs = 620;
 const assistantDragThreshold = 6;
 const assistantThinkingDelayMs = 280;
 const birdThoughtDurationMs = 4000;
+const birdAssistantReplyMinDurationMs = 5200;
+const birdAssistantReplyMaxDurationMs = 12000;
+const birdBubbleMinWidth = 96;
+const birdBubbleMaxWidth = 460;
 const statusBoxRevealClicks = 3;
 const expandedPanelWindowSize = { width: 430, height: 520 };
+const assistantPanelWindowSize = { width: 430, height: 500 };
 const assistantMinSize = { width: 300, height: 300 };
 const assistantMaxSize = { width: 760, height: 720 };
 let windowFitTimer = null;
@@ -72,6 +77,7 @@ let windowFrameResizeFrame = null;
 let speechHiddenBeforeAssistant = null;
 let assistantThinkingTimer = null;
 let assistantResize = null;
+let birdBubbleResize = null;
 let birdThoughtTimer = null;
 let birdBubbleMode = null;
 let currentSettingsSnapshot = null;
@@ -130,14 +136,12 @@ function agentName(task) {
 
   const codexTurn = label.match(/^Codex:\s*([^#]+?)(?:\s*#(.+))?$/);
   if (codexTurn) {
-    const suffix = codexTurn[2] ? ` #${codexTurn[2].trim()}` : '';
-    return `Codex · ${codexTurn[1].trim()}${suffix}`;
+    return `Codex · ${codexTurn[1].trim()}`;
   }
 
   const codexTerminal = label.match(/^Codex Terminal:\s*(.+)$/);
   if (codexTerminal) {
-    const pid = command.match(/pid\s+(\d+)/);
-    return `Codex terminal · ${codexTerminal[1].trim()}${pid ? ` #${pid[1]}` : ''}`;
+    return `Codex terminal · ${codexTerminal[1].trim()}`;
   }
 
   const claude = label.match(/^Claude:\s*(.+)$/);
@@ -148,6 +152,36 @@ function agentName(task) {
 
   const homePath = command.match(/(?:^|~\/|\/)([^/·\s]+)\s*·/);
   return homePath ? homePath[1] : label || 'Agent';
+}
+
+function indexedAgentNames(tasks) {
+  const totals = new Map();
+  for (const task of tasks) {
+    const name = agentName(task);
+    totals.set(name, (totals.get(name) || 0) + 1);
+  }
+
+  const seen = new Map();
+  return tasks.map((task) => {
+    const name = agentName(task);
+    if ((totals.get(name) || 0) <= 1) return name;
+    const next = (seen.get(name) || 0) + 1;
+    seen.set(name, next);
+    return `${name} ${next}`;
+  });
+}
+
+function displayAgentName(task, nameMap = null) {
+  return nameMap?.get(task.id) || agentName(task);
+}
+
+function cleanedTaskDetail(task) {
+  if (task.source !== 'agent' && task.source !== 'assistant') return task.command || 'external task';
+  const parts = String(task.command || '')
+    .split(' · ')
+    .map((part) => part.trim())
+    .filter((part) => part && !/^pid\s+\d+$/i.test(part) && !/^turn\s+/i.test(part));
+  return parts.join(' · ') || 'agent task';
 }
 
 function agentStatusWord(status) {
@@ -167,6 +201,7 @@ function visibleAgentTasks(snapshot) {
 function renderStatusItems(snapshot) {
   statusHint.replaceChildren();
   const agents = visibleAgentTasks(snapshot);
+  const names = indexedAgentNames(agents);
 
   if (agents.length === 0) {
     const item = document.createElement('li');
@@ -180,12 +215,12 @@ function renderStatusItems(snapshot) {
     return;
   }
 
-  for (const task of agents) {
+  for (const [index, task] of agents.entries()) {
     const item = document.createElement('li');
     const label = document.createElement('span');
     label.className = 'agent-line';
-    label.textContent = `${agentStatusWord(task.status)} · ${agentName(task)}`;
-    item.title = task.status === 'hitl' ? task.command : label.textContent;
+    label.textContent = `${agentStatusWord(task.status)} · ${names[index]}`;
+    item.title = task.status === 'hitl' ? cleanedTaskDetail(task) : label.textContent;
     item.append(label);
     statusHint.append(item);
   }
@@ -209,7 +244,7 @@ function displayStatus(task) {
   return task.status;
 }
 
-function renderTask(task) {
+function renderTask(task, nameMap = null) {
   const card = document.createElement('article');
   card.className = 'task-card';
 
@@ -218,7 +253,9 @@ function renderTask(task) {
 
   const title = document.createElement('div');
   title.className = 'task-title';
-  title.textContent = task.label;
+  title.textContent = task.source === 'agent' || task.source === 'assistant'
+    ? displayAgentName(task, nameMap)
+    : task.label;
 
   const status = document.createElement('div');
   status.className = `task-status ${task.status}`;
@@ -233,8 +270,9 @@ function renderTask(task) {
 
   const command = document.createElement('div');
   command.className = 'task-command';
-  command.title = task.command;
-  command.textContent = task.command || 'external task';
+  const detail = cleanedTaskDetail(task);
+  command.title = detail;
+  command.textContent = detail;
 
   card.append(top, meta, command);
   return card;
@@ -242,6 +280,8 @@ function renderTask(task) {
 
 function render(snapshot) {
   const agentTasks = snapshot.tasks.filter((task) => task.source === 'agent' || task.source === 'assistant');
+  const agentDisplayNames = indexedAgentNames(agentTasks);
+  const agentNameMap = new Map(agentTasks.map((task, index) => [task.id, agentDisplayNames[index]]));
   taskCount.textContent = String(agentTasks.length);
   summaryPill.textContent = statusText(snapshot);
   renderStatusItems(snapshot);
@@ -261,7 +301,7 @@ function render(snapshot) {
   }
 
   for (const task of agentTasks) {
-    taskList.append(renderTask(task));
+    taskList.append(renderTask(task, agentNameMap));
   }
 }
 
@@ -297,8 +337,8 @@ async function openGuide() {
   if (!guidePanel.hidden) return;
   restoreWindowEditModeAfterGuide = windowEditMode;
   if (windowEditMode) setWindowEditMode(false);
-  if (settingsPanel && !settingsPanel.hidden) closeSettings();
-  if (assistantPanel && !assistantPanel.hidden) closeAssistantChat();
+  if (settingsPanel && !settingsPanel.hidden) closeSettings({ resize: false });
+  if (assistantPanel && !assistantPanel.hidden) closeAssistantChat({ resize: false });
   try {
     await window.buddy.windowAction({ type: 'panel-mode', open: true });
   } catch {
@@ -308,9 +348,11 @@ async function openGuide() {
   requestAnimationFrame(clampFloatingLayout);
 }
 
-function closeGuide() {
+function closeGuide(options = {}) {
   guidePanel.hidden = true;
-  window.buddy.windowAction({ type: 'panel-mode', open: false });
+  if (options.resize !== false) {
+    window.buddy.windowAction({ type: 'panel-mode', open: false });
+  }
   const shouldRestoreWindowEditMode = restoreWindowEditModeAfterGuide;
   restoreWindowEditModeAfterGuide = false;
   if (shouldRestoreWindowEditMode && !windowEditMode) {
@@ -386,8 +428,8 @@ function settingsPayloadFromForm() {
 
 function openSettings(snapshot = null) {
   if (!settingsPanel) return;
-  if (guidePanel && !guidePanel.hidden) closeGuide();
-  if (assistantPanel && !assistantPanel.hidden) closeAssistantChat();
+  if (guidePanel && !guidePanel.hidden) closeGuide({ resize: false });
+  if (assistantPanel && !assistantPanel.hidden) closeAssistantChat({ resize: false });
   settingsPanel.hidden = false;
   if (snapshot) renderSettings(snapshot);
   else loadSettingsSnapshot();
@@ -396,10 +438,13 @@ function openSettings(snapshot = null) {
   });
 }
 
-function closeSettings() {
+function closeSettings(options = {}) {
   if (!settingsPanel) return;
   settingsPanel.hidden = true;
-  scheduleWindowFit({ persistCompact: false });
+  if (options.resize !== false) {
+    window.buddy.windowAction({ type: 'panel-mode', open: false });
+    scheduleWindowFit({ persistCompact: false });
+  }
 }
 
 function renderSaveStatus(text, mode = '') {
@@ -456,12 +501,51 @@ function appendAssistantMessage(role, text, meta = '') {
   return message;
 }
 
+function birdBubbleWidthLimit() {
+  return Math.max(birdBubbleMinWidth, Math.min(birdBubbleMaxWidth, window.screen?.availWidth || birdBubbleMaxWidth));
+}
+
+function readBirdBubbleWidth() {
+  const width = Number(readLayout().birdBubble?.width);
+  if (!Number.isFinite(width)) return null;
+  return Math.round(clamp(width, birdBubbleMinWidth, birdBubbleWidthLimit()));
+}
+
+function writeBirdBubbleWidth(width) {
+  const nextWidth = Math.round(clamp(width, birdBubbleMinWidth, birdBubbleWidthLimit()));
+  writeLayout({
+    birdBubble: {
+      ...readLayout().birdBubble,
+      width: nextWidth
+    }
+  });
+  return nextWidth;
+}
+
+function birdBubbleResizeHandle(edge) {
+  const handle = document.createElement('button');
+  handle.type = 'button';
+  handle.className = `bird-bubble-resize-handle ${edge}`;
+  handle.dataset.edge = edge;
+  handle.setAttribute('aria-label', `Resize parrot speech bubble from ${edge}`);
+  return handle;
+}
+
 function renderBirdBubble(text, mode) {
   if (!birdStage || !birdThinking) return;
-  birdThinking.replaceChildren(document.createTextNode(text));
+  const textNode = document.createElement('span');
+  textNode.className = 'bird-bubble-text';
+  textNode.textContent = text;
   if (mode === 'thinking') {
-    birdThinking.append(document.createElement('span'));
+    const dots = document.createElement('span');
+    dots.className = 'thinking-dots';
+    textNode.append(dots);
   }
+  birdThinking.replaceChildren(
+    birdBubbleResizeHandle('left'),
+    textNode,
+    birdBubbleResizeHandle('right')
+  );
   birdBubbleMode = mode;
   birdStage.classList.toggle('thinking', mode === 'thinking');
   birdStage.classList.toggle('thoughtful', mode === 'thought');
@@ -477,6 +561,7 @@ function hideBirdBubble(mode = null) {
   birdStage.classList.remove('thinking', 'thoughtful', 'bubble-left', 'bubble-right', 'bubble-below');
   birdThinking.setAttribute('aria-hidden', 'true');
   birdThinking.style.removeProperty('max-width');
+  birdThinking.style.removeProperty('width');
   scheduleWindowFit({ persistCompact: false });
 }
 
@@ -493,18 +578,20 @@ function placeBirdBubble() {
   );
   const shouldOpenBelow = birdRect.top < 58 && viewportHeight - birdRect.bottom > 58;
   const availableSideSpace = shouldOpenLeft ? spaceLeft : spaceRight;
-  const minBubbleWidth = birdBubbleMode === 'thought' ? 176 : 96;
-  const maxBubbleWidth = birdBubbleMode === 'thought' ? 340 : 236;
-  const maxWidth = Math.round(clamp(
-    Math.max(availableSideSpace, minBubbleWidth),
-    minBubbleWidth,
-    maxBubbleWidth
+  const automaticMinWidth = birdBubbleMode === 'thought' ? 176 : birdBubbleMinWidth;
+  const automaticMaxWidth = birdBubbleMode === 'thought' ? 340 : 236;
+  const savedWidth = readBirdBubbleWidth();
+  const maxWidth = savedWidth || Math.round(clamp(
+    Math.max(availableSideSpace, automaticMinWidth),
+    automaticMinWidth,
+    automaticMaxWidth
   ));
 
   birdStage.classList.toggle('bubble-left', shouldOpenLeft);
   birdStage.classList.toggle('bubble-right', !shouldOpenLeft);
   birdStage.classList.toggle('bubble-below', shouldOpenBelow);
   birdThinking.style.maxWidth = `${maxWidth}px`;
+  birdThinking.style.width = savedWidth ? `${maxWidth}px` : '';
 }
 
 function setAssistantThinking(visible) {
@@ -533,6 +620,45 @@ function showBirdThought(text) {
     birdThoughtTimer = null;
     hideBirdBubble('thought');
   }, birdThoughtDurationMs);
+}
+
+function showBirdAssistantReply(text) {
+  const reply = String(text || '').trim();
+  if (!reply) return;
+  clearTimeout(birdThoughtTimer);
+  renderBirdBubble(reply, 'thought');
+  const duration = clamp(
+    birdAssistantReplyMinDurationMs + reply.length * 45,
+    birdAssistantReplyMinDurationMs,
+    birdAssistantReplyMaxDurationMs
+  );
+  birdThoughtTimer = setTimeout(() => {
+    birdThoughtTimer = null;
+    hideBirdBubble('thought');
+  }, duration);
+}
+
+function agentAlertBubbleText(payload = {}) {
+  const name = agentName({
+    label: payload.label,
+    command: payload.command,
+    source: payload.source
+  });
+
+  if (payload.kind === 'attention') {
+    return `${name} 확인 필요!`;
+  }
+
+  if (payload.kind !== 'finished') return '';
+  if (payload.status === 'failed') return `${name} 작업 확인 필요!`;
+  if (payload.status === 'stopped') return `${name} 작업 중지됨`;
+  return `${name} 작업 완료!`;
+}
+
+function handleAgentAlert(payload) {
+  playAlertAnimation();
+  const text = agentAlertBubbleText(payload);
+  if (text) showBirdAssistantReply(text);
 }
 
 async function showRandomBirdThought() {
@@ -591,14 +717,14 @@ async function loadAssistantSnapshot() {
 
 async function openAssistantChat() {
   if (!assistantPanel) return;
-  if (guidePanel && !guidePanel.hidden) closeGuide();
-  if (settingsPanel && !settingsPanel.hidden) closeSettings();
+  if (guidePanel && !guidePanel.hidden) closeGuide({ resize: false });
+  if (settingsPanel && !settingsPanel.hidden) closeSettings({ resize: false });
   if (speech && speechHiddenBeforeAssistant === null) {
     speechHiddenBeforeAssistant = speech.hidden;
     if (!speech.hidden) setSpeechVisible(false, false);
   }
   try {
-    await window.buddy.windowAction({ type: 'panel-mode', open: true });
+    await window.buddy.windowAction({ type: 'panel-mode', open: true, panel: 'assistant' });
   } catch {
     // Keep the assistant usable even if the native window resize fails.
   }
@@ -610,15 +736,17 @@ async function openAssistantChat() {
   });
 }
 
-function closeAssistantChat() {
+function closeAssistantChat(options = {}) {
   if (!assistantPanel) return;
   assistantPanel.hidden = true;
-  window.buddy.windowAction({ type: 'panel-mode', open: false });
+  if (options.resize !== false) {
+    window.buddy.windowAction({ type: 'panel-mode', open: false });
+  }
   if (speech && speechHiddenBeforeAssistant === false) {
     setSpeechVisible(true, false);
   }
   speechHiddenBeforeAssistant = null;
-  scheduleWindowFit({ persistCompact: false });
+  if (options.resize !== false) scheduleWindowFit({ persistCompact: false });
 }
 
 async function sendAssistantMessage() {
@@ -641,10 +769,12 @@ async function sendAssistantMessage() {
     clearAssistantThinking();
     pending?.remove();
     if (result.ok) {
+      const reply = result.reply || '정리했습니다.';
       const files = Array.isArray(result.changedFiles) && result.changedFiles.length > 0
         ? `저장: ${result.changedFiles.slice(0, 4).join(', ')}`
         : '';
-      appendAssistantMessage('assistant', result.reply || '정리했습니다.', files);
+      appendAssistantMessage('assistant', reply, files);
+      showBirdAssistantReply(reply);
       renderAssistantReminders(result.snapshot);
       return;
     }
@@ -1063,7 +1193,7 @@ function shiftContentAfterWindowFit(rects, dx, dy) {
   }
 }
 
-async function fitWindowToContent({ persistCompact = true } = {}) {
+async function fitWindowToContent({ persistCompact = true, animate = false } = {}) {
   if (fittingWindow) return;
 
   const rects = captureContentRects();
@@ -1073,14 +1203,18 @@ async function fitWindowToContent({ persistCompact = true } = {}) {
   const assistantHasCustomSize = Number.isFinite(layoutAssistant.width) || Number.isFinite(layoutAssistant.height);
   const guideLikePanelOpen = (guidePanel && !guidePanel.hidden) || (settingsPanel && !settingsPanel.hidden);
   const assistantOpen = assistantPanel && !assistantPanel.hidden;
-  const minPanelWidth = guideLikePanelOpen || (assistantOpen && !assistantHasCustomSize)
+  const minPanelWidth = guideLikePanelOpen
     ? expandedPanelWindowSize.width
-    : assistantOpen
+    : assistantOpen && !assistantHasCustomSize
+      ? assistantPanelWindowSize.width
+      : assistantOpen
       ? assistantMinSize.width + windowFitMargin * 2
       : 92;
-  const minPanelHeight = guideLikePanelOpen || (assistantOpen && !assistantHasCustomSize)
+  const minPanelHeight = guideLikePanelOpen
     ? expandedPanelWindowSize.height
-    : assistantOpen
+    : assistantOpen && !assistantHasCustomSize
+      ? assistantPanelWindowSize.height
+      : assistantOpen
       ? assistantMinSize.height + windowFitMargin * 2
       : 88;
 
@@ -1092,7 +1226,8 @@ async function fitWindowToContent({ persistCompact = true } = {}) {
       margin: windowFitMargin,
       minWidth: minPanelWidth,
       minHeight: minPanelHeight,
-      persistCompact
+      persistCompact,
+      animate
     });
 
     if (result?.ok) {
@@ -1103,11 +1238,12 @@ async function fitWindowToContent({ persistCompact = true } = {}) {
   }
 }
 
-function scheduleWindowFit(options) {
+function scheduleWindowFit(options = {}) {
   clearTimeout(windowFitTimer);
+  const { delay = 50, ...fitOptions } = options;
   windowFitTimer = setTimeout(() => {
-    fitWindowToContent(options);
-  }, 50);
+    fitWindowToContent(fitOptions);
+  }, Math.max(0, delay));
 }
 
 function setSpeechVisible(visible, persist = true) {
@@ -1166,7 +1302,15 @@ function resizeSpeechTo(width, height, left = null, { allowOverflow = false } = 
 function fitSpeechToViewport() {
   if (!speech || speech.hidden) return;
   const rect = speech.getBoundingClientRect();
-  resizeSpeechTo(rect.width, rect.height, rect.left);
+  const overflowsWindow = (
+    rect.left < 0 ||
+    rect.top < 0 ||
+    rect.right > window.innerWidth ||
+    rect.bottom > window.innerHeight
+  );
+  if (overflowsWindow && !speechDrag && !speechResize) {
+    scheduleWindowFit();
+  }
 }
 
 function restoreFloatingLayout() {
@@ -1354,6 +1498,53 @@ function setupSpeechResizeHandle(handle, edge) {
 
 setupSpeechResizeHandle(speechResizeHandle, 'right');
 setupSpeechResizeHandle(speechResizeLeftHandle, 'left');
+
+if (birdThinking) {
+  birdThinking.addEventListener('pointerdown', (event) => {
+    const handle = event.target.closest('.bird-bubble-resize-handle');
+    if (event.button !== 0 || !handle || !birdBubbleMode) return;
+    const rect = birdThinking.getBoundingClientRect();
+    birdBubbleResize = {
+      pointerId: event.pointerId,
+      edge: handle.dataset.edge,
+      startScreenX: event.screenX,
+      startWidth: rect.width,
+      handle
+    };
+    handle.setPointerCapture(event.pointerId);
+    birdThinking.classList.add('resizing');
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  birdThinking.addEventListener('pointermove', (event) => {
+    if (!birdBubbleResize || birdBubbleResize.pointerId !== event.pointerId) return;
+    const dx = event.screenX - birdBubbleResize.startScreenX;
+    const nextWidth = birdBubbleResize.edge === 'left'
+      ? birdBubbleResize.startWidth - dx
+      : birdBubbleResize.startWidth + dx;
+    const width = writeBirdBubbleWidth(nextWidth);
+    birdThinking.style.width = `${width}px`;
+    birdThinking.style.maxWidth = `${width}px`;
+    scheduleWindowFit({ persistCompact: false });
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  const stopBirdBubbleResize = (event) => {
+    if (!birdBubbleResize || birdBubbleResize.pointerId !== event.pointerId) return;
+    birdBubbleResize.handle.releasePointerCapture(event.pointerId);
+    birdBubbleResize = null;
+    birdThinking.classList.remove('resizing');
+    placeBirdBubble();
+    scheduleWindowFit({ persistCompact: false });
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  birdThinking.addEventListener('pointerup', stopBirdBubbleResize);
+  birdThinking.addEventListener('pointercancel', stopBirdBubbleResize);
+}
 
 function setupWindowResizeHandle(handle) {
   if (!handle) return;
@@ -1835,7 +2026,7 @@ if (closeButton) {
 setWindowEditMode(true);
 
 window.buddy.onTasksChanged(render);
-window.buddy.onAgentAlert(playAlertAnimation);
+window.buddy.onAgentAlert(handleAgentAlert);
 window.buddy.onSettingsChanged?.(renderSettings);
 window.buddy.onOpenSettings?.((snapshot) => openSettings(snapshot));
 loadAssistantSnapshot();

@@ -6,6 +6,10 @@ const path = require('node:path');
 const DEFAULT_ASSISTANT_ROOT = path.join(os.homedir(), '.parrot-buddy', 'assistant');
 const DEFAULT_TIMEZONE = 'Asia/Seoul';
 const THOUGHT_BANK_VERSION = 4;
+const MEMORY_MAINTENANCE_VERSION = 1;
+const MEMORY_MAINTENANCE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MEMORY_MAINTENANCE_MIN_CHARS = 900;
+const MEMORY_MAINTENANCE_MIN_RETAIN_RATIO = 0.12;
 const ASSISTANT_INSTRUCTIONS = `# Joy Personal Assistant Instructions
 
 You are Joy, the yellow parrot personal assistant inside Parrot Buddy.
@@ -88,6 +92,10 @@ function cleanInlineText(value, maxLength = 64) {
 
 function sourceHash(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 16);
+}
+
+function normalizeMarkdown(text) {
+  return String(text || '').replace(/\r\n/g, '\n').trim();
 }
 
 function uniqueItems(items) {
@@ -173,6 +181,16 @@ class AssistantStore {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     if (!fs.existsSync(filePath)) {
       fs.writeFileSync(filePath, `${JSON.stringify(defaultValue, null, 2)}\n`, 'utf8');
+    }
+  }
+
+  readJson(relativePath, fallback = null) {
+    const filePath = this.resolve(relativePath);
+    if (!fs.existsSync(filePath)) return fallback;
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch {
+      return fallback;
     }
   }
 
@@ -271,6 +289,135 @@ class AssistantStore {
       memory: this.readText('memory.md').slice(-6000),
       inbox: this.readText('inbox.md').slice(-4000),
       reminders
+    };
+  }
+
+  memoryMaintenanceRelativePath() {
+    return 'memory-maintenance.json';
+  }
+
+  memoryBackupRelativePath(now = new Date()) {
+    const dateKey = formatDateKey(now, this.timezone);
+    const timeKey = formatTimeKey(now, this.timezone).replace(/:/g, '');
+    return this.relativePath('memory-backups', `${dateKey}-${timeKey}.md`);
+  }
+
+  memoryMaintenanceState() {
+    return this.readJson(this.memoryMaintenanceRelativePath(), {
+      version: MEMORY_MAINTENANCE_VERSION,
+      lastRunAt: null,
+      memoryHash: null,
+      status: 'never'
+    }) || {};
+  }
+
+  writeMemoryMaintenanceState(state) {
+    const next = {
+      version: MEMORY_MAINTENANCE_VERSION,
+      ...state
+    };
+    this.writeText(this.memoryMaintenanceRelativePath(), `${JSON.stringify(next, null, 2)}\n`);
+    return this.memoryMaintenanceRelativePath();
+  }
+
+  loadMemoryMaintenanceContext(now = new Date(), reminderStore = null) {
+    this.ensureBase();
+    const dateKey = formatDateKey(now, this.timezone);
+    const memory = this.readText('memory.md', '');
+    const recentHistory = this.loadRecentHistory(dateKey, 7);
+    const recentSessions = this.loadRecentSessions(12);
+    const reminders = reminderStore ? reminderStore.upcoming(20, now) : [];
+    return {
+      dateKey,
+      timezone: this.timezone,
+      memory,
+      memoryHash: sourceHash(memory),
+      recentHistory,
+      recentSessions,
+      reminders,
+      state: this.memoryMaintenanceState()
+    };
+  }
+
+  shouldRunMemoryMaintenance(now = new Date(), { force = false } = {}) {
+    this.ensureBase();
+    const memory = this.readText('memory.md', '');
+    const memoryBody = normalizeMarkdown(memory.replace(/^#\s*Parrot Buddy Memory\s*/i, ''));
+    const memoryHash = sourceHash(memory);
+    const state = this.memoryMaintenanceState();
+    const lastRunMs = Date.parse(state.lastRunAt || '');
+    const ageMs = Number.isFinite(lastRunMs) ? now.getTime() - lastRunMs : Infinity;
+
+    if (!force && state.memoryHash === memoryHash) {
+      return { ok: false, reason: 'memory-unchanged', memoryHash, state };
+    }
+    if (!force && memoryBody.length < MEMORY_MAINTENANCE_MIN_CHARS) {
+      return { ok: false, reason: 'memory-small', memoryHash, state };
+    }
+    if (!force && ageMs < MEMORY_MAINTENANCE_INTERVAL_MS) {
+      return { ok: false, reason: 'recently-ran', memoryHash, state };
+    }
+    return { ok: true, reason: force ? 'forced' : 'due', memoryHash, state };
+  }
+
+  applyMemoryMaintenance(result = {}, { now = new Date() } = {}) {
+    this.ensureBase();
+    const current = this.readText('memory.md', '');
+    const currentHash = sourceHash(current);
+    let nextMemory = normalizeMarkdown(result.memory);
+    const changedFiles = [];
+
+    if (!nextMemory) {
+      const statePath = this.writeMemoryMaintenanceState({
+        lastRunAt: now.toISOString(),
+        memoryHash: currentHash,
+        status: 'skipped-empty',
+        summary: result.summary || ''
+      });
+      return { ok: true, changed: false, skipped: true, reason: 'empty-result', changedFiles: [statePath] };
+    }
+
+    if (!/^#\s*Parrot Buddy Memory/i.test(nextMemory)) {
+      nextMemory = `# Parrot Buddy Memory\n\n${nextMemory}`;
+    }
+    nextMemory = `${nextMemory}\n`;
+
+    const currentBodyLength = normalizeMarkdown(current.replace(/^#\s*Parrot Buddy Memory\s*/i, '')).length;
+    const nextBodyLength = normalizeMarkdown(nextMemory.replace(/^#\s*Parrot Buddy Memory\s*/i, '')).length;
+    const unsafeMinimumLength = Math.max(180, currentBodyLength * MEMORY_MAINTENANCE_MIN_RETAIN_RATIO);
+    if (currentBodyLength >= MEMORY_MAINTENANCE_MIN_CHARS && nextBodyLength < unsafeMinimumLength) {
+      const statePath = this.writeMemoryMaintenanceState({
+        lastRunAt: now.toISOString(),
+        memoryHash: currentHash,
+        status: 'skipped-unsafe-short',
+        summary: result.summary || ''
+      });
+      return { ok: true, changed: false, skipped: true, reason: 'unsafe-short-result', changedFiles: [statePath] };
+    }
+
+    if (normalizeMarkdown(current) !== normalizeMarkdown(nextMemory)) {
+      const backupPath = this.memoryBackupRelativePath(now);
+      this.writeText(backupPath, current.endsWith('\n') ? current : `${current}\n`);
+      this.writeText('memory.md', nextMemory);
+      changedFiles.push(backupPath, 'memory.md');
+    }
+
+    const statePath = this.writeMemoryMaintenanceState({
+      lastRunAt: now.toISOString(),
+      lastChangedAt: changedFiles.includes('memory.md') ? now.toISOString() : this.memoryMaintenanceState().lastChangedAt || null,
+      memoryHash: sourceHash(this.readText('memory.md', '')),
+      status: changedFiles.includes('memory.md') ? 'compacted' : 'unchanged',
+      summary: result.summary || '',
+      removed: ensureArray(result.removed).slice(0, 20)
+    });
+    changedFiles.push(statePath);
+
+    return {
+      ok: true,
+      changed: changedFiles.includes('memory.md'),
+      skipped: false,
+      reason: changedFiles.includes('memory.md') ? 'compacted' : 'unchanged',
+      changedFiles
     };
   }
 

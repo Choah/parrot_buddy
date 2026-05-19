@@ -3,8 +3,10 @@ const assert = require('node:assert/strict');
 const {
   CodexAdapter,
   buildAssistantPrompt,
+  buildMemoryMaintenancePrompt,
   extractJson,
-  validateAction
+  validateAction,
+  validateMemoryMaintenanceResult
 } = require('../src/assistant/codex-adapter');
 
 test('extracts JSON from fenced Codex output', () => {
@@ -69,4 +71,70 @@ test('CodexAdapter uses injected runner and output file', async () => {
   });
 
   assert.equal(action.reply, '저장했어요.');
+});
+
+test('builds memory maintenance prompt with compacting rules', () => {
+  const prompt = buildMemoryMaintenancePrompt({
+    now: new Date('2026-05-19T00:00:00.000Z'),
+    context: {
+      dateKey: '2026-05-19',
+      timezone: 'Asia/Seoul',
+      memory: '# Parrot Buddy Memory\n\n- 사용자는 짧은 설명을 선호한다.',
+      reminders: [],
+      recentHistory: [],
+      recentSessions: []
+    }
+  });
+
+  assert.match(prompt, /background memory maintenance worker/);
+  assert.match(prompt, /Return JSON only/);
+  assert.match(prompt, /Current memory\.md/);
+  assert.match(prompt, /짧은 설명/);
+  assert.match(prompt, /Remove duplicates/);
+});
+
+test('validates memory maintenance result defaults', () => {
+  const result = validateMemoryMaintenanceResult({
+    memory: '  # Parrot Buddy Memory\n\n- 사용자는 짧은 설명을 선호한다.  ',
+    removed: ['  중복 메모  ']
+  });
+
+  assert.equal(result.memory, '# Parrot Buddy Memory\n\n- 사용자는 짧은 설명을 선호한다.');
+  assert.equal(result.summary, '');
+  assert.deepEqual(result.removed, ['중복 메모']);
+  assert.throws(() => validateMemoryMaintenanceResult({ memory: '' }), /memory is required/);
+});
+
+test('CodexAdapter runs memory maintenance with injected runner', async () => {
+  const adapter = new CodexAdapter({
+    command: 'codex',
+    runner: async ({ args, input }) => {
+      const outputIndex = args.indexOf('--output-last-message') + 1;
+      const fs = require('node:fs');
+      assert.match(input, /background memory maintenance worker/);
+      fs.writeFileSync(args[outputIndex], JSON.stringify({
+        memory: '# Parrot Buddy Memory\n\n- 사용자는 짧은 설명을 선호한다.',
+        summary: '중복 메모를 정리했다.',
+        removed: ['중복 메모']
+      }), 'utf8');
+      return { stdout: '', stderr: '' };
+    }
+  });
+
+  const result = await adapter.runMemoryMaintenance({
+    assistantRoot: process.cwd(),
+    now: new Date('2026-05-19T00:00:00.000Z'),
+    context: {
+      dateKey: '2026-05-19',
+      timezone: 'Asia/Seoul',
+      memory: '# Parrot Buddy Memory\n\n- 중복 메모\n- 중복 메모',
+      reminders: [],
+      recentHistory: [],
+      recentSessions: []
+    }
+  });
+
+  assert.match(result.memory, /짧은 설명/);
+  assert.equal(result.summary, '중복 메모를 정리했다.');
+  assert.deepEqual(result.removed, ['중복 메모']);
 });
