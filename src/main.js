@@ -8,7 +8,7 @@ const { AgentMonitor } = require('./agent-monitor');
 const { AssistantOrchestrator } = require('./assistant/assistant-orchestrator');
 const { STATUS_SOURCES } = require('./task-store');
 const { SettingsStore } = require('./settings-store');
-const { clampWindowPosition, virtualWorkArea } = require('./window-bounds');
+const { clampWindowBounds, clampWindowPosition, virtualWorkAreaBounds } = require('./window-bounds');
 
 const store = new TaskStore();
 const settingsStore = new SettingsStore();
@@ -248,7 +248,7 @@ function traySummaryLabel(snapshot = store.snapshot()) {
   const runningCount = (summary.agentRunningCount || 0) + (summary.assistantRunningCount || 0);
   if (hitlCount > 0) return `Status: confirm needed (${hitlCount})`;
   if (runningCount > 0) return `Status: working (${runningCount})`;
-  if (summary.agentReadyCount > 0) return `Status: ready (${summary.agentReadyCount})`;
+  if (summary.statusReadyCount > 0) return `Status: ready (${summary.statusReadyCount})`;
   return 'Status: no active agents';
 }
 
@@ -392,6 +392,18 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+function currentDisplayWorkArea(bounds) {
+  return screen.getDisplayMatching(bounds).workArea;
+}
+
+function allDisplayWorkAreaBounds() {
+  return virtualWorkAreaBounds(screen.getAllDisplays());
+}
+
+function movementWorkArea(bounds) {
+  return allDisplayWorkAreaBounds() || currentDisplayWorkArea(bounds);
+}
+
 function moveWindowBy(delta = {}) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
 
@@ -410,7 +422,7 @@ function moveWindowBy(delta = {}) {
     ...bounds,
     x: bounds.x + dx,
     y: bounds.y + dy
-  }, virtualWorkArea(screen.getAllDisplays()) || screen.getDisplayMatching(bounds).workArea);
+  }, movementWorkArea(bounds));
   if (!nextPosition) return;
   mainWindow.setPosition(nextPosition.x, nextPosition.y, false);
 }
@@ -426,15 +438,13 @@ function setWindowSize({ width, height, animate = false }) {
   const nextHeight = Math.round(Math.max(MIN_WINDOW_SIZE.height, Number(height) || COMPACT_WINDOW_SIZE.height));
 
   const bounds = mainWindow.getBounds();
-  const workArea = screen.getDisplayMatching(bounds).workArea;
-  const nextX = clamp(bounds.x, workArea.x, workArea.x + workArea.width - nextWidth);
-  const nextY = clamp(bounds.y, workArea.y, workArea.y + workArea.height - nextHeight);
-  mainWindow.setBounds({
-    x: Math.round(nextX),
-    y: Math.round(nextY),
+  const nextBounds = clampWindowBounds({
+    ...bounds,
     width: nextWidth,
     height: nextHeight
-  }, Boolean(animate));
+  }, currentDisplayWorkArea(bounds));
+  if (!nextBounds) return { ok: false };
+  mainWindow.setBounds(nextBounds, Boolean(animate));
   return { ok: true, bounds: mainWindow.getBounds() };
 }
 
@@ -447,7 +457,7 @@ function resizeWindowBy(delta = {}) {
   if (!edge || (!dx && !dy)) return { ok: false };
 
   const bounds = mainWindow.getBounds();
-  const workArea = screen.getDisplayMatching(bounds).workArea;
+  const workArea = currentDisplayWorkArea(bounds);
   const originalRight = bounds.x + bounds.width;
   const originalBottom = bounds.y + bounds.height;
   let { x, y, width, height } = bounds;
@@ -530,28 +540,34 @@ function fitWindowToContent(frame = {}) {
   const minWidth = Math.max(MIN_WINDOW_SIZE.width, Number(frame.minWidth) || 0);
   const minHeight = Math.max(MIN_WINDOW_SIZE.height, Number(frame.minHeight) || 0);
   const bounds = mainWindow.getBounds();
-  const workArea = screen.getDisplayMatching(bounds).workArea;
+  const workArea = currentDisplayWorkArea(bounds);
 
   let width = Math.round(Math.max(minWidth, right - left + margin * 2));
   let height = Math.round(Math.max(minHeight, bottom - top + margin * 2));
   width = Math.min(width, workArea.width);
   height = Math.min(height, workArea.height);
 
-  const maxX = workArea.x + workArea.width - width;
-  const maxY = workArea.y + workArea.height - height;
-  const x = Math.round(clamp(bounds.x + left - margin, workArea.x, maxX));
-  const y = Math.round(clamp(bounds.y + top - margin, workArea.y, maxY));
-  const nextBounds = { x, y, width, height };
+  const nextBounds = clampWindowBounds({
+    ...bounds,
+    x: bounds.x + left - margin,
+    y: bounds.y + top - margin,
+    width,
+    height
+  }, workArea);
+  if (!nextBounds) return { ok: false };
 
   mainWindow.setBounds(nextBounds, false);
   if (frame.persistCompact !== false && !expandedPanelWindowOpen) {
-    compactWindowSize = { width, height };
+    compactWindowSize = {
+      width: nextBounds.width,
+      height: nextBounds.height
+    };
   }
 
   return {
     ok: true,
-    dx: x - bounds.x,
-    dy: y - bounds.y,
+    dx: nextBounds.x - bounds.x,
+    dy: nextBounds.y - bounds.y,
     bounds: nextBounds
   };
 }

@@ -46,6 +46,7 @@ const birdThinking = document.getElementById('birdThinking');
 const birdResizeHandle = document.getElementById('birdResizeHandle');
 const windowFrameEditor = document.getElementById('windowFrameEditor');
 const windowResizeHandles = document.querySelectorAll('.window-resize-handle');
+const { PARROT_STATE_CLASSES, parrotClassNames } = window.ParrotBuddyStatus;
 const layoutStorageKey = 'parrotBuddyLayoutV10';
 const enableSpeechFloating = false;
 const speechMargin = 8;
@@ -226,32 +227,6 @@ function renderStatusItems(snapshot) {
   }
 }
 
-function parrotStatus(snapshot) {
-  const agents = snapshot.tasks.filter((task) => task.source === 'agent' || task.source === 'assistant');
-  if (agents.some((task) => task.status === 'hitl')) return 'hitl';
-  if (agents.some((task) => task.status === 'running')) return 'running';
-  if (agents.some((task) => task.status === 'waiting' || task.status === 'success')) return 'success';
-  if (agents.some((task) => task.status === 'stopped')) return 'stopped';
-  return 'idle';
-}
-
-function isCodexTask(task) {
-  const label = String(task?.label || '');
-  return task?.source === 'agent' && (
-    label === 'Codex'
-    || label === 'Codex VS Code'
-    || /^Codex(?::|\s|$)/.test(label)
-  );
-}
-
-function parrotWingActive(snapshot) {
-  const agents = snapshot.tasks.filter((task) => task.source === 'agent' || task.source === 'assistant');
-  return agents.some((task) => (
-    task.status === 'running'
-    || (isCodexTask(task) && task.status === 'waiting')
-  ));
-}
-
 function displayStatus(task) {
   if (task.status === 'hitl') return 'confirm';
   if (task.status === 'running') return 'working';
@@ -303,10 +278,9 @@ function render(snapshot) {
   summaryPill.textContent = statusText(snapshot);
   renderStatusItems(snapshot);
 
-  parrot.classList.remove('hitl', 'running', 'success', 'failed', 'stopped', 'wing-active');
-  const currentStatus = parrotStatus(snapshot);
-  if (currentStatus !== 'idle') parrot.classList.add(currentStatus);
-  if (parrotWingActive(snapshot)) parrot.classList.add('wing-active');
+  parrot.classList.remove(...PARROT_STATE_CLASSES);
+  const nextParrotClasses = parrotClassNames(snapshot);
+  if (nextParrotClasses.length > 0) parrot.classList.add(...nextParrotClasses);
 
   taskList.replaceChildren();
   if (agentTasks.length === 0) {
@@ -895,7 +869,6 @@ let birdClickCount = 0;
 let birdClickTimer = null;
 let pokeAnimationTimer = null;
 let alertAnimationTimer = null;
-let birdDragAnimationTimer = null;
 let alertAnimationRunning = false;
 let queuedAlertAnimations = 0;
 let suppressNextParrotClick = false;
@@ -941,14 +914,10 @@ function playAlertAnimation() {
 }
 
 function startBirdDragAnimation() {
-  clearTimeout(birdDragAnimationTimer);
-  birdDragAnimationTimer = null;
   parrot.classList.add('moving');
 }
 
 function stopBirdDragAnimation() {
-  clearTimeout(birdDragAnimationTimer);
-  birdDragAnimationTimer = null;
   parrot.classList.remove('moving');
 }
 
@@ -1982,8 +1951,10 @@ birdDragSurface.addEventListener('pointermove', (event) => {
   if (birdDrag.totalDistance > assistantDragThreshold) clearAssistantLongPress();
   if (assistantLongPressFired) return;
   if (birdDrag.totalDistance <= 4) return;
-  birdDrag.moved = true;
-  startBirdDragAnimation();
+  if (!birdDrag.moved) {
+    birdDrag.moved = true;
+    startBirdDragAnimation();
+  }
   window.buddy.windowAction({ type: 'move-by', dx: moveX, dy: moveY });
 });
 

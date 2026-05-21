@@ -152,8 +152,10 @@ class TaskStore extends EventEmitter {
       agentStoppedCount: agentTasks.filter((task) => task.status === 'stopped').length,
       assistantRunningCount: assistantTasks.filter((task) => task.status === 'running').length,
       assistantHitlCount: assistantTasks.filter((task) => task.status === 'hitl').length,
+      assistantReadyCount: assistantTasks.filter((task) => task.status === 'waiting' || task.status === 'success').length,
       statusRunningCount: statusTasks.filter((task) => task.status === 'running').length,
       statusHitlCount: statusTasks.filter((task) => task.status === 'hitl').length,
+      statusReadyCount: statusTasks.filter((task) => task.status === 'waiting' || task.status === 'success').length,
       lastFinishedStatus: this.lastFinishedStatus,
       updatedAt: nowIso()
     };

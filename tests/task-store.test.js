@@ -102,6 +102,22 @@ test('prioritizes agent HITL tasks above running tasks', () => {
   assert.equal(store.getSummary().agentRunningCount, 1);
 });
 
+test('counts assistant ready tasks in status summary', () => {
+  const store = new TaskStore();
+
+  store.upsertTask({
+    id: 'assistant-ready',
+    label: 'Parrot assistant',
+    source: 'assistant',
+    command: 'ready',
+    status: 'waiting'
+  });
+
+  const summary = store.getSummary();
+  assert.equal(summary.assistantReadyCount, 1);
+  assert.equal(summary.statusReadyCount, 1);
+});
+
 test('rejects invalid terminal statuses', () => {
   const store = new TaskStore();
   store.startTask({ id: 'task-invalid', label: 'Invalid' });

@@ -15,7 +15,7 @@
     "uninstall:shell": "node ./scripts/uninstall-shell.js",
     "start": "electron .",
     "dist:mac": "npm run build:icon && electron-builder --mac dmg zip --publish never",
-    "test": "node --test tests/*.test.js",
+    "test": "node --test",
     "check": "npm test"
   },
   "keywords": [

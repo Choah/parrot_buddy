@@ -1,4 +1,5 @@
 function clamp(value, min, max) {
+  if (max < min) return min;
   return Math.min(Math.max(value, min), max);
 }
 
@@ -6,7 +7,7 @@ function workAreaForDisplay(display) {
   return display?.workArea || display?.bounds || null;
 }
 
-function virtualWorkArea(displays = []) {
+function virtualWorkAreaBounds(displays = []) {
   const areas = displays
     .map(workAreaForDisplay)
     .filter((area) => (
@@ -43,7 +44,21 @@ function clampWindowPosition(bounds, area) {
   };
 }
 
+function clampWindowBounds(bounds, area) {
+  if (!bounds || !area) return null;
+  const width = Math.round(Math.min(bounds.width, area.width));
+  const height = Math.round(Math.min(bounds.height, area.height));
+  const position = clampWindowPosition({ ...bounds, width, height }, area);
+  if (!position) return null;
+  return {
+    ...position,
+    width,
+    height
+  };
+}
+
 module.exports = {
+  clampWindowBounds,
   clampWindowPosition,
-  virtualWorkArea
+  virtualWorkAreaBounds
 };
