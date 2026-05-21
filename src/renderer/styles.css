@@ -797,6 +797,14 @@ body.window-editing .bird-resize-handle {
   animation: wing-flap 0.42s ease-in-out infinite alternate;
 }
 
+.lovebird.wing-active .wing {
+  animation: wing-wiggle 0.72s ease-in-out infinite alternate;
+}
+
+.lovebird.moving .wing {
+  animation: wing-flap 0.24s ease-in-out infinite alternate;
+}
+
 .lovebird.running .ground-shadow {
   animation: running-shadow 1.8s ease-in-out infinite;
 }
@@ -1771,5 +1779,14 @@ code {
   }
   to {
     transform: rotate(-16deg);
+  }
+}
+
+@keyframes wing-wiggle {
+  from {
+    transform: rotate(-1.5deg);
+  }
+  to {
+    transform: rotate(-7deg);
   }
 }

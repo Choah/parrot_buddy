@@ -8,6 +8,7 @@ const { AgentMonitor } = require('./agent-monitor');
 const { AssistantOrchestrator } = require('./assistant/assistant-orchestrator');
 const { STATUS_SOURCES } = require('./task-store');
 const { SettingsStore } = require('./settings-store');
+const { clampWindowPosition, virtualWorkArea } = require('./window-bounds');
 
 const store = new TaskStore();
 const settingsStore = new SettingsStore();
@@ -405,10 +406,13 @@ function moveWindowBy(delta = {}) {
   stopWander();
 
   const bounds = mainWindow.getBounds();
-  const workArea = screen.getDisplayMatching(bounds).workArea;
-  const nextX = clamp(bounds.x + dx, workArea.x, workArea.x + workArea.width - bounds.width);
-  const nextY = clamp(bounds.y + dy, workArea.y, workArea.y + workArea.height - bounds.height);
-  mainWindow.setPosition(Math.round(nextX), Math.round(nextY), false);
+  const nextPosition = clampWindowPosition({
+    ...bounds,
+    x: bounds.x + dx,
+    y: bounds.y + dy
+  }, virtualWorkArea(screen.getAllDisplays()) || screen.getDisplayMatching(bounds).workArea);
+  if (!nextPosition) return;
+  mainWindow.setPosition(nextPosition.x, nextPosition.y, false);
 }
 
 function pokeWindow(pointer) {
@@ -495,7 +499,7 @@ function resizeWindowBy(delta = {}) {
     height: Math.round(Math.max(MIN_WINDOW_SIZE.height, height))
   };
 
-  mainWindow.setBounds(nextBounds, Boolean(frame.animate));
+  mainWindow.setBounds(nextBounds, Boolean(delta.animate));
   if (delta.persistCompact !== false && !expandedPanelWindowOpen) {
     compactWindowSize = {
       width: nextBounds.width,

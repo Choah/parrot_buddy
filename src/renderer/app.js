@@ -235,6 +235,23 @@ function parrotStatus(snapshot) {
   return 'idle';
 }
 
+function isCodexTask(task) {
+  const label = String(task?.label || '');
+  return task?.source === 'agent' && (
+    label === 'Codex'
+    || label === 'Codex VS Code'
+    || /^Codex(?::|\s|$)/.test(label)
+  );
+}
+
+function parrotWingActive(snapshot) {
+  const agents = snapshot.tasks.filter((task) => task.source === 'agent' || task.source === 'assistant');
+  return agents.some((task) => (
+    task.status === 'running'
+    || (isCodexTask(task) && task.status === 'waiting')
+  ));
+}
+
 function displayStatus(task) {
   if (task.status === 'hitl') return 'confirm';
   if (task.status === 'running') return 'working';
@@ -286,9 +303,10 @@ function render(snapshot) {
   summaryPill.textContent = statusText(snapshot);
   renderStatusItems(snapshot);
 
-  parrot.classList.remove('hitl', 'running', 'success', 'failed', 'stopped');
+  parrot.classList.remove('hitl', 'running', 'success', 'failed', 'stopped', 'wing-active');
   const currentStatus = parrotStatus(snapshot);
   if (currentStatus !== 'idle') parrot.classList.add(currentStatus);
+  if (parrotWingActive(snapshot)) parrot.classList.add('wing-active');
 
   taskList.replaceChildren();
   if (agentTasks.length === 0) {
@@ -877,6 +895,7 @@ let birdClickCount = 0;
 let birdClickTimer = null;
 let pokeAnimationTimer = null;
 let alertAnimationTimer = null;
+let birdDragAnimationTimer = null;
 let alertAnimationRunning = false;
 let queuedAlertAnimations = 0;
 let suppressNextParrotClick = false;
@@ -919,6 +938,18 @@ function playAlertAnimation() {
       alertAnimationTimer = setTimeout(playAlertAnimation, 160);
     }
   }, 920);
+}
+
+function startBirdDragAnimation() {
+  clearTimeout(birdDragAnimationTimer);
+  birdDragAnimationTimer = null;
+  parrot.classList.add('moving');
+}
+
+function stopBirdDragAnimation() {
+  clearTimeout(birdDragAnimationTimer);
+  birdDragAnimationTimer = null;
+  parrot.classList.remove('moving');
 }
 
 function clamp(value, min, max) {
@@ -1952,6 +1983,7 @@ birdDragSurface.addEventListener('pointermove', (event) => {
   if (assistantLongPressFired) return;
   if (birdDrag.totalDistance <= 4) return;
   birdDrag.moved = true;
+  startBirdDragAnimation();
   window.buddy.windowAction({ type: 'move-by', dx: moveX, dy: moveY });
 });
 
@@ -1960,6 +1992,7 @@ function stopBirdDrag(event) {
   birdDragSurface.releasePointerCapture(event.pointerId);
   clearAssistantLongPress();
   suppressNextParrotClick = birdDrag.moved || assistantLongPressFired;
+  stopBirdDragAnimation();
   birdDrag = null;
   if (suppressNextParrotClick) {
     setTimeout(() => {
